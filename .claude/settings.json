@@ -1,0 +1,12 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(pip3 install python-pptx)",
+      "Bash(python3 update_ppts.py)",
+      "Bash(python3 -c \":*)",
+      "Bash(lsof -i :3800 -t)",
+      "Bash(lsof -i :3801 -t)",
+      "Bash(xargs ls -l)"
+    ]
+  }
+}

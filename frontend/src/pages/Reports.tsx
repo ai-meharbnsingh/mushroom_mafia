@@ -1,0 +1,357 @@
+import React, { useState, useEffect, useRef } from 'react';
+import { gsap } from 'gsap';
+import { Plus, Search, Download, Trash2, FileText } from 'lucide-react';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
+import {
+  Sheet,
+  SheetContent,
+  SheetHeader,
+  SheetTitle,
+  SheetFooter,
+} from '@/components/ui/sheet';
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+  DialogFooter,
+} from '@/components/ui/dialog';
+import { TypeBadge } from '@/components/ui-custom/TypeBadge';
+import { EmptyState } from '@/components/ui-custom/EmptyState';
+import { useApp } from '@/store/AppContext';
+import { useToast } from '@/hooks/useToast';
+import { useAuth } from '@/hooks/useAuth';
+import { reportService } from '@/services/reportService';
+import { mapReport } from '@/utils/mappers';
+import type { Report, ReportType, ReportFormat, ReportFormData } from '@/types';
+
+export const Reports: React.FC = () => {
+  const { state, dispatch } = useApp();
+  const toast = useToast();
+  const { checkPermission } = useAuth();
+  const tableRef = useRef<HTMLDivElement>(null);
+  
+  const [searchQuery, setSearchQuery] = useState('');
+  const [isDrawerOpen, setIsDrawerOpen] = useState(false);
+  const [deleteReport, setDeleteReport] = useState<Report | null>(null);
+  
+  const [formData, setFormData] = useState<ReportFormData>({
+    plantId: undefined,
+    dateFrom: new Date(Date.now() - 86400000).toISOString().split('T')[0],
+    dateTo: new Date().toISOString().split('T')[0],
+    type: 'DAILY',
+    format: 'PDF',
+  });
+  
+  useEffect(() => {
+    if (tableRef.current) {
+      gsap.fromTo(
+        tableRef.current.querySelectorAll('tr'),
+        { opacity: 0, y: 10 },
+        { opacity: 1, y: 0, duration: 0.3, stagger: 0.03, ease: 'power3.out' }
+      );
+    }
+  }, []);
+  
+  // Filter reports
+  const filteredReports = state.reports.filter(report => {
+    const matchesSearch =
+      searchQuery === '' ||
+      report.name.toLowerCase().includes(searchQuery.toLowerCase());
+    
+    return matchesSearch;
+  });
+  
+  const handleGenerate = async () => {
+    try {
+      const res = await reportService.generate({
+        plant_id: formData.plantId ? Number(formData.plantId) : undefined,
+        date_from: formData.dateFrom,
+        date_to: formData.dateTo,
+        report_type: formData.type,
+        report_format: formData.format,
+      });
+      dispatch({ type: 'ADD_REPORT', payload: mapReport(res) });
+      toast.success('Report generated successfully');
+      setIsDrawerOpen(false);
+    } catch (err: any) {
+      toast.error(err?.response?.data?.detail || 'Failed to generate report');
+    }
+  };
+
+  const handleDelete = async () => {
+    if (deleteReport) {
+      try {
+        await reportService.delete(Number(deleteReport.id));
+        dispatch({ type: 'DELETE_REPORT', payload: deleteReport.id });
+        toast.success('Report deleted');
+        setDeleteReport(null);
+      } catch (err: any) {
+        toast.error(err?.response?.data?.detail || 'Failed to delete report');
+      }
+    }
+  };
+  
+  const handleDownload = (report: Report) => {
+    toast.success(`Downloading ${report.name}`);
+  };
+  
+  return (
+    <div className="space-y-6">
+      {/* Header */}
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-2xl font-bold text-iot-primary mb-1">Reports</h1>
+          <p className="text-sm text-iot-secondary">Generate and download reports</p>
+        </div>
+        <Button
+          onClick={() => setIsDrawerOpen(true)}
+          className="gradient-primary text-iot-bg-primary"
+        >
+          <Plus className="w-4 h-4 mr-2" />
+          Generate Report
+        </Button>
+      </div>
+      
+      {/* Filters */}
+      <div className="flex flex-wrap items-center gap-3">
+        <div className="relative flex-1 min-w-[200px] max-w-sm">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-iot-muted" />
+          <Input
+            type="text"
+            placeholder="Search reports..."
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            className="input-dark pl-10 w-full"
+          />
+        </div>
+      </div>
+      
+      {/* Table */}
+      {filteredReports.length > 0 ? (
+        <div
+          ref={tableRef}
+          className="bg-iot-secondary rounded-2xl border border-iot-subtle overflow-hidden"
+        >
+          <div className="overflow-x-auto">
+            <table className="data-table">
+              <thead>
+                <tr>
+                  <th>Report Name</th>
+                  <th>Type</th>
+                  <th>Format</th>
+                  <th>Date Range</th>
+                  <th>Size</th>
+                  <th>Generated By</th>
+                  <th>Generated At</th>
+                  <th>Actions</th>
+                </tr>
+              </thead>
+              <tbody>
+                {filteredReports.map((report) => {
+                  return (
+                    <tr key={report.id} className="hover:bg-iot-tertiary/30">
+                      <td className="font-medium">{report.name}</td>
+                      <td>
+                        <TypeBadge type={report.type} variant="report" />
+                      </td>
+                      <td>
+                        <div className="flex items-center gap-2">
+                          <FileText className="w-4 h-4 text-iot-muted" />
+                          <TypeBadge type={report.format} variant="format" />
+                        </div>
+                      </td>
+                      <td className="text-xs text-iot-muted">
+                        {new Date(report.dateFrom).toLocaleDateString()} - {new Date(report.dateTo).toLocaleDateString()}
+                      </td>
+                      <td>{report.fileSize}</td>
+                      <td>{report.generatedBy}</td>
+                      <td className="text-iot-muted text-xs">
+                        {new Date(report.generatedAt).toLocaleString()}
+                      </td>
+                      <td>
+                        <div className="flex items-center gap-2">
+                          <button
+                            onClick={() => handleDownload(report)}
+                            className="p-1.5 rounded-lg text-iot-secondary hover:text-iot-cyan hover:bg-iot-cyan/10 transition-colors"
+                          >
+                            <Download className="w-4 h-4" />
+                          </button>
+                          {checkPermission('ADMIN') && (
+                            <button
+                              onClick={() => setDeleteReport(report)}
+                              className="p-1.5 rounded-lg text-iot-secondary hover:text-iot-red hover:bg-iot-red/10 transition-colors"
+                            >
+                              <Trash2 className="w-4 h-4" />
+                            </button>
+                          )}
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      ) : (
+        <EmptyState
+          icon={FileText}
+          title="No reports found"
+          description="Generate your first report to get started."
+          actionLabel="Generate Report"
+          onAction={() => setIsDrawerOpen(true)}
+        />
+      )}
+      
+      {/* Generate Report Drawer */}
+      <Sheet open={isDrawerOpen} onOpenChange={setIsDrawerOpen}>
+        <SheetContent className="bg-iot-secondary border-iot-subtle w-full sm:max-w-lg overflow-y-auto">
+          <SheetHeader>
+            <SheetTitle className="text-iot-primary">Generate Report</SheetTitle>
+          </SheetHeader>
+          
+          <div className="space-y-4 py-6">
+            <div>
+              <label className="block text-xs font-medium uppercase tracking-wider text-iot-secondary mb-2">
+                Plant
+              </label>
+              <Select
+                value={formData.plantId || 'ALL'}
+                onValueChange={(v) => setFormData({ ...formData, plantId: v === 'ALL' ? undefined : v })}
+              >
+                <SelectTrigger className="input-dark w-full">
+                  <SelectValue placeholder="All Plants" />
+                </SelectTrigger>
+                <SelectContent className="bg-iot-secondary border-iot-subtle">
+                  <SelectItem value="ALL">All Plants</SelectItem>
+                  {state.plants.map(plant => (
+                    <SelectItem key={plant.id} value={plant.id}>{plant.name}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <label className="block text-xs font-medium uppercase tracking-wider text-iot-secondary mb-2">
+                  Date From
+                </label>
+                <Input
+                  type="date"
+                  value={formData.dateFrom}
+                  onChange={(e) => setFormData({ ...formData, dateFrom: e.target.value })}
+                  className="input-dark w-full"
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-medium uppercase tracking-wider text-iot-secondary mb-2">
+                  Date To
+                </label>
+                <Input
+                  type="date"
+                  value={formData.dateTo}
+                  onChange={(e) => setFormData({ ...formData, dateTo: e.target.value })}
+                  className="input-dark w-full"
+                />
+              </div>
+            </div>
+            
+            <div>
+              <label className="block text-xs font-medium uppercase tracking-wider text-iot-secondary mb-2">
+                Report Type
+              </label>
+              <Select
+                value={formData.type}
+                onValueChange={(v) => setFormData({ ...formData, type: v as ReportType })}
+              >
+                <SelectTrigger className="input-dark w-full">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent className="bg-iot-secondary border-iot-subtle">
+                  <SelectItem value="DAILY">Daily</SelectItem>
+                  <SelectItem value="WEEKLY">Weekly</SelectItem>
+                  <SelectItem value="MONTHLY">Monthly</SelectItem>
+                  <SelectItem value="CUSTOM">Custom</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            
+            <div>
+              <label className="block text-xs font-medium uppercase tracking-wider text-iot-secondary mb-2">
+                Format
+              </label>
+              <Select
+                value={formData.format}
+                onValueChange={(v) => setFormData({ ...formData, format: v as ReportFormat })}
+              >
+                <SelectTrigger className="input-dark w-full">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent className="bg-iot-secondary border-iot-subtle">
+                  <SelectItem value="PDF">PDF</SelectItem>
+                  <SelectItem value="EXCEL">Excel</SelectItem>
+                  <SelectItem value="CSV">CSV</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+          
+          <SheetFooter className="gap-3">
+            <Button
+              variant="outline"
+              onClick={() => setIsDrawerOpen(false)}
+              className="border-iot-subtle text-iot-secondary"
+            >
+              Cancel
+            </Button>
+            <Button
+              onClick={handleGenerate}
+              className="gradient-primary text-iot-bg-primary"
+            >
+              Generate
+            </Button>
+          </SheetFooter>
+        </SheetContent>
+      </Sheet>
+      
+      {/* Delete Confirmation Dialog */}
+      <Dialog open={!!deleteReport} onOpenChange={() => setDeleteReport(null)}>
+        <DialogContent className="bg-iot-secondary border-iot-subtle">
+          <DialogHeader>
+            <DialogTitle className="text-iot-primary">Delete Report</DialogTitle>
+            <DialogDescription className="text-iot-secondary">
+              Are you sure you want to delete "{deleteReport?.name}"? This action cannot be undone.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter className="gap-3">
+            <Button
+              variant="outline"
+              onClick={() => setDeleteReport(null)}
+              className="border-iot-subtle text-iot-secondary"
+            >
+              Cancel
+            </Button>
+            <Button
+              onClick={handleDelete}
+              className="bg-iot-red text-white hover:bg-iot-red/90"
+            >
+              Delete
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </div>
+  );
+};
+
+export default Reports;

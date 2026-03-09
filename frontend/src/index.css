@@ -1,0 +1,436 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap');
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    --background: 222 25% 5%;
+    --foreground: 230 40% 97%;
+    --card: 222 20% 8%;
+    --card-foreground: 230 40% 97%;
+    --popover: 222 20% 8%;
+    --popover-foreground: 230 40% 97%;
+    --primary: 186 100% 59%;
+    --primary-foreground: 222 25% 5%;
+    --secondary: 222 15% 12%;
+    --secondary-foreground: 230 40% 97%;
+    --muted: 222 15% 15%;
+    --muted-foreground: 222 10% 55%;
+    --accent: 186 100% 59%;
+    --accent-foreground: 222 25% 5%;
+    --destructive: 350 100% 59%;
+    --destructive-foreground: 230 40% 97%;
+    --border: 222 15% 15%;
+    --input: 222 15% 12%;
+    --ring: 186 100% 59%;
+    --radius: 0.75rem;
+    
+    --sidebar-background: 210 50% 8%;
+    --sidebar-foreground: 230 40% 97%;
+    --sidebar-primary: 186 100% 59%;
+    --sidebar-primary-foreground: 222 25% 5%;
+    --sidebar-accent: 222 15% 15%;
+    --sidebar-accent-foreground: 230 40% 97%;
+    --sidebar-border: 222 15% 15%;
+    --sidebar-ring: 186 100% 59%;
+    
+    /* Custom IoT Colors */
+    --iot-bg-primary: #0B0D10;
+    --iot-bg-secondary: #11131A;
+    --iot-bg-tertiary: #1A1D26;
+    --iot-cyan: #2EEFFF;
+    --iot-green: #27FB6B;
+    --iot-yellow: #FFD166;
+    --iot-red: #FF2D55;
+    --iot-purple: #B26CFF;
+    --iot-text-primary: #F5F7FF;
+    --iot-text-secondary: #A7ACB8;
+    --iot-text-muted: #6D7484;
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+  
+  html {
+    scroll-behavior: smooth;
+  }
+  
+  body {
+    @apply bg-background text-foreground antialiased;
+    font-family: 'Inter', system-ui, sans-serif;
+    background-color: var(--iot-bg-primary);
+  }
+  
+  code, pre, .mono {
+    font-family: 'JetBrains Mono', monospace;
+  }
+}
+
+@layer utilities {
+  .text-glow-cyan {
+    text-shadow: 0 0 18px rgba(46, 239, 255, 0.5);
+  }
+  
+  .text-glow-green {
+    text-shadow: 0 0 18px rgba(39, 251, 107, 0.5);
+  }
+  
+  .text-glow-red {
+    text-shadow: 0 0 18px rgba(255, 45, 85, 0.5);
+  }
+  
+  .box-glow-cyan {
+    box-shadow: 0 0 18px rgba(46, 239, 255, 0.18);
+  }
+  
+  .box-glow-green {
+    box-shadow: 0 0 18px rgba(39, 251, 107, 0.18);
+  }
+  
+  .box-glow-red {
+    box-shadow: 0 0 18px rgba(255, 45, 85, 0.18);
+  }
+  
+  .box-glow-yellow {
+    box-shadow: 0 0 18px rgba(255, 209, 102, 0.18);
+  }
+  
+  .gradient-border {
+    position: relative;
+    background: linear-gradient(var(--iot-bg-secondary), var(--iot-bg-secondary)) padding-box,
+                linear-gradient(135deg, rgba(46, 239, 255, 0.3), rgba(178, 108, 255, 0.3)) border-box;
+    border: 1px solid transparent;
+  }
+  
+  .gradient-primary {
+    background: linear-gradient(135deg, var(--iot-cyan), var(--iot-purple));
+  }
+  
+  .bg-iot-primary {
+    background-color: var(--iot-bg-primary);
+  }
+  
+  .bg-iot-secondary {
+    background-color: var(--iot-bg-secondary);
+  }
+  
+  .bg-iot-tertiary {
+    background-color: var(--iot-bg-tertiary);
+  }
+  
+  .text-iot-primary {
+    color: var(--iot-text-primary);
+  }
+  
+  .text-iot-secondary {
+    color: var(--iot-text-secondary);
+  }
+  
+  .text-iot-muted {
+    color: var(--iot-text-muted);
+  }
+  
+  .text-iot-cyan {
+    color: var(--iot-cyan);
+  }
+  
+  .text-iot-green {
+    color: var(--iot-green);
+  }
+  
+  .text-iot-yellow {
+    color: var(--iot-yellow);
+  }
+  
+  .text-iot-red {
+    color: var(--iot-red);
+  }
+  
+  .text-iot-purple {
+    color: var(--iot-purple);
+  }
+  
+  .border-iot-subtle {
+    border-color: rgba(255, 255, 255, 0.06);
+  }
+  
+  .shadow-iot-card {
+    box-shadow: 0 18px 50px rgba(0, 0, 0, 0.45);
+  }
+  
+  .animate-pulse-glow {
+    animation: pulse-glow 2s ease-in-out infinite;
+  }
+  
+  @keyframes pulse-glow {
+    0%, 100% {
+      opacity: 0.6;
+    }
+    50% {
+      opacity: 1;
+    }
+  }
+  
+  .animate-data-pulse {
+    animation: data-pulse 0.4s ease-out;
+  }
+  
+  @keyframes data-pulse {
+    0% {
+      border-color: rgba(46, 239, 255, 0.6);
+    }
+    100% {
+      border-color: rgba(255, 255, 255, 0.06);
+    }
+  }
+  
+  .scrollbar-thin {
+    scrollbar-width: thin;
+    scrollbar-color: var(--iot-bg-tertiary) transparent;
+  }
+  
+  .scrollbar-thin::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+  }
+  
+  .scrollbar-thin::-webkit-scrollbar-track {
+    background: transparent;
+  }
+  
+  .scrollbar-thin::-webkit-scrollbar-thumb {
+    background-color: var(--iot-bg-tertiary);
+    border-radius: 3px;
+  }
+  
+  .noise-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    pointer-events: none;
+    opacity: 0.04;
+    z-index: 9999;
+    background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)'/%3E%3C/svg%3E");
+  }
+}
+
+/* Gauge Styles */
+.gauge-ring {
+  transform: rotate(-90deg);
+  transform-origin: 50% 50%;
+}
+
+.gauge-ring-bg {
+  stroke: rgba(255, 255, 255, 0.08);
+}
+
+/* Toggle Switch */
+.toggle-switch {
+  position: relative;
+  width: 44px;
+  height: 24px;
+  border-radius: 12px;
+  background-color: var(--iot-bg-tertiary);
+  transition: background-color 0.2s ease;
+}
+
+.toggle-switch.active {
+  background-color: var(--iot-green);
+}
+
+.toggle-thumb {
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  background-color: white;
+  transition: transform 0.2s ease;
+}
+
+.toggle-switch.active .toggle-thumb {
+  transform: translateX(20px);
+}
+
+/* Table Styles */
+.data-table {
+  width: 100%;
+  border-collapse: separate;
+  border-spacing: 0;
+}
+
+.data-table th {
+  text-align: left;
+  padding: 12px 16px;
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--iot-text-secondary);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.data-table td {
+  padding: 14px 16px;
+  font-size: 13px;
+  color: var(--iot-text-primary);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.04);
+}
+
+.data-table tr:hover td {
+  background-color: rgba(255, 255, 255, 0.02);
+}
+
+.data-table tr:nth-child(even) td {
+  background-color: rgba(255, 255, 255, 0.01);
+}
+
+/* Form Styles */
+.input-dark {
+  background-color: var(--iot-bg-tertiary);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 10px;
+  padding: 12px 16px;
+  color: var(--iot-text-primary);
+  font-size: 14px;
+  transition: border-color 0.2s ease, box-shadow 0.2s ease;
+}
+
+.input-dark:focus {
+  outline: none;
+  border-color: var(--iot-cyan);
+  box-shadow: 0 0 0 3px rgba(46, 239, 255, 0.1);
+}
+
+.input-dark::placeholder {
+  color: var(--iot-text-muted);
+}
+
+/* Badge Styles */
+.badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  border-radius: 6px;
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.badge-green {
+  background-color: rgba(39, 251, 107, 0.15);
+  color: var(--iot-green);
+}
+
+.badge-yellow {
+  background-color: rgba(255, 209, 102, 0.15);
+  color: var(--iot-yellow);
+}
+
+.badge-red {
+  background-color: rgba(255, 45, 85, 0.15);
+  color: var(--iot-red);
+}
+
+.badge-cyan {
+  background-color: rgba(46, 239, 255, 0.15);
+  color: var(--iot-cyan);
+}
+
+.badge-purple {
+  background-color: rgba(178, 108, 255, 0.15);
+  color: var(--iot-purple);
+}
+
+.badge-gray {
+  background-color: rgba(167, 172, 184, 0.15);
+  color: var(--iot-text-secondary);
+}
+
+.badge-orange {
+  background-color: rgba(255, 165, 0, 0.15);
+  color: #FFA500;
+}
+
+/* Status Dot */
+.status-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+}
+
+.status-dot.online {
+  background-color: var(--iot-green);
+  box-shadow: 0 0 8px var(--iot-green);
+}
+
+.status-dot.offline {
+  background-color: var(--iot-red);
+}
+
+.status-dot.warning {
+  background-color: var(--iot-yellow);
+  box-shadow: 0 0 8px var(--iot-yellow);
+}
+
+/* Card Hover Effect */
+.card-hover {
+  transition: transform 0.2s ease, border-color 0.2s ease;
+}
+
+.card-hover:hover {
+  transform: translateY(-4px);
+  border-color: rgba(255, 255, 255, 0.12);
+}
+
+/* Drawer Animation */
+.drawer-enter {
+  transform: translateX(100%);
+}
+
+.drawer-enter-active {
+  transform: translateX(0);
+  transition: transform 0.35s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.drawer-exit {
+  transform: translateX(0);
+}
+
+.drawer-exit-active {
+  transform: translateX(100%);
+  transition: transform 0.25s ease-in;
+}
+
+/* Toast Animation */
+.toast-enter {
+  transform: translateX(100%);
+  opacity: 0;
+}
+
+.toast-enter-active {
+  transform: translateX(0);
+  opacity: 1;
+  transition: all 0.35s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.toast-exit {
+  transform: translateX(0);
+  opacity: 1;
+}
+
+.toast-exit-active {
+  transform: translateX(100%);
+  opacity: 0;
+  transition: all 0.25s ease-in;
+}
