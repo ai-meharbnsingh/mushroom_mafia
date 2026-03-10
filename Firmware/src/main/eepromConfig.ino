@@ -83,6 +83,29 @@ void readFromEeprom() {
   Serial.println(_humidityRelayStatus);
   Serial.println(_ACRelayStatus);
 
+  // Read expanded relay states (addresses 171-174)
+  // Legacy migration: if EEPROM byte == 255 (uninitialized), default to OFF
+  uint8_t ahuRaw = EEPROM.read(ADDR_AHU_RELAY_STATUS);
+  uint8_t hum2Raw = EEPROM.read(ADDR_HUM2_RELAY_STATUS);
+  uint8_t ductRaw = EEPROM.read(ADDR_DUCT_RELAY_STATUS);
+  uint8_t extraRaw = EEPROM.read(ADDR_EXTRA_RELAY_STATUS);
+
+  _ahuRelayStatus = (ahuRaw == 255) ? false : (bool)ahuRaw;
+  _humidifierRelayStatus = (hum2Raw == 255) ? false : (bool)hum2Raw;
+  _ductFanRelayStatus = (ductRaw == 255) ? false : (bool)ductRaw;
+  _extraRelayStatus = (extraRaw == 255) ? false : (bool)extraRaw;
+
+  // Initialize uninitialized EEPROM slots to 0
+  if (ahuRaw == 255) { EEPROM.write(ADDR_AHU_RELAY_STATUS, 0); }
+  if (hum2Raw == 255) { EEPROM.write(ADDR_HUM2_RELAY_STATUS, 0); }
+  if (ductRaw == 255) { EEPROM.write(ADDR_DUCT_RELAY_STATUS, 0); }
+  if (extraRaw == 255) { EEPROM.write(ADDR_EXTRA_RELAY_STATUS, 0); }
+
+  Serial.print("AHU relay: "); Serial.println(_ahuRelayStatus);
+  Serial.print("Humidifier relay: "); Serial.println(_humidifierRelayStatus);
+  Serial.print("Duct fan relay: "); Serial.println(_ductFanRelayStatus);
+  Serial.print("Extra relay: "); Serial.println(_extraRelayStatus);
+
   EEPROM.get(ADDR_MIN_VAL_CO2, CO2MinValue);
   EEPROM.get(ADDR_MIN_VAL_TEMP, tempMinValue);
   EEPROM.get(ADDR_MIN_VAL_HUM, humidityMin);

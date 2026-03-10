@@ -17,6 +17,10 @@ void initializeDevices()  {
   pinMode(HUMIDITY_RELAY_1, OUTPUT);
   pinMode(TEMP_RELAY_2, OUTPUT);
   pinMode(CO2_RELAY_3, OUTPUT);
+  pinMode(AHU_RELAY_4, OUTPUT);
+  pinMode(HUMIDIFIER_RELAY_5, OUTPUT);
+  pinMode(DUCT_FAN_RELAY_6, OUTPUT);
+  pinMode(EXTRA_RELAY_7, OUTPUT);
   eepromInit();
   // If already MQTT-provisioned, skip HTTP auth (MQTT will authenticate via broker)
   if (!mqttProvisioned) {

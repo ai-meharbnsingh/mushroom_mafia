@@ -157,9 +157,17 @@ void handleKillSwitch(String payload) {
         digitalWrite(CO2_RELAY_3, LOW);
         digitalWrite(HUMIDITY_RELAY_1, LOW);
         digitalWrite(TEMP_RELAY_2, LOW);
+        digitalWrite(AHU_RELAY_4, LOW);
+        digitalWrite(HUMIDIFIER_RELAY_5, LOW);
+        digitalWrite(DUCT_FAN_RELAY_6, LOW);
+        digitalWrite(EXTRA_RELAY_7, LOW);
         _co2RelayStatus = false;
         _humidityRelayStatus = false;
         _ACRelayStatus = false;
+        _ahuRelayStatus = false;
+        _humidifierRelayStatus = false;
+        _ductFanRelayStatus = false;
+        _extraRelayStatus = false;
     } else if (action == "ENABLE") {
         deviceDisabled = false;
         Serial.println("DEVICE RE-ENABLED via kill-switch");
@@ -195,6 +203,26 @@ void handleRelayCommand(String payload) {
         digitalWrite(TEMP_RELAY_2, relayState ? HIGH : LOW);
         _ACRelayStatus = relayState;
         Serial.println("MQTT: Temp relay -> " + String(relayState ? "ON" : "OFF"));
+    } else if (relayType == "AHU" || relayType == "ahu") {
+        digitalWrite(AHU_RELAY_4, relayState ? HIGH : LOW);
+        _ahuRelayStatus = relayState;
+        writeToEeprom<bool>(ADDR_AHU_RELAY_STATUS, _ahuRelayStatus);
+        Serial.println("MQTT: AHU relay -> " + String(relayState ? "ON" : "OFF"));
+    } else if (relayType == "HUMIDIFIER" || relayType == "humidifier") {
+        digitalWrite(HUMIDIFIER_RELAY_5, relayState ? HIGH : LOW);
+        _humidifierRelayStatus = relayState;
+        writeToEeprom<bool>(ADDR_HUM2_RELAY_STATUS, _humidifierRelayStatus);
+        Serial.println("MQTT: Humidifier relay -> " + String(relayState ? "ON" : "OFF"));
+    } else if (relayType == "DUCT_FAN" || relayType == "duct_fan") {
+        digitalWrite(DUCT_FAN_RELAY_6, relayState ? HIGH : LOW);
+        _ductFanRelayStatus = relayState;
+        writeToEeprom<bool>(ADDR_DUCT_RELAY_STATUS, _ductFanRelayStatus);
+        Serial.println("MQTT: Duct fan relay -> " + String(relayState ? "ON" : "OFF"));
+    } else if (relayType == "EXTRA" || relayType == "extra") {
+        digitalWrite(EXTRA_RELAY_7, relayState ? HIGH : LOW);
+        _extraRelayStatus = relayState;
+        writeToEeprom<bool>(ADDR_EXTRA_RELAY_STATUS, _extraRelayStatus);
+        Serial.println("MQTT: Extra relay -> " + String(relayState ? "ON" : "OFF"));
     }
 }
 
@@ -236,7 +264,11 @@ void publishTelemetry() {
     json += "\"relay_states\":{";
     json += "\"co2\":" + String(_co2RelayStatus ? "true" : "false") + ",";
     json += "\"humidity\":" + String(_humidityRelayStatus ? "true" : "false") + ",";
-    json += "\"temperature\":" + String(_ACRelayStatus ? "true" : "false");
+    json += "\"temperature\":" + String(_ACRelayStatus ? "true" : "false") + ",";
+    json += "\"ahu\":" + String(_ahuRelayStatus ? "true" : "false") + ",";
+    json += "\"humidifier\":" + String(_humidifierRelayStatus ? "true" : "false") + ",";
+    json += "\"duct_fan\":" + String(_ductFanRelayStatus ? "true" : "false") + ",";
+    json += "\"extra\":" + String(_extraRelayStatus ? "true" : "false");
     json += "},";
     json += "\"wifi_rssi\":" + String(WiFi.RSSI()) + ",";
     json += "\"free_heap\":" + String(ESP.getFreeHeap()) + ",";

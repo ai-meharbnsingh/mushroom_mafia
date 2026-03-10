@@ -47,7 +47,11 @@ void sendHTTPRequest() {
     json += "\"relay_states\":{";
     json += "\"co2\":" + String(_co2RelayStatus ? "true" : "false") + ",";
     json += "\"humidity\":" + String(_humidityRelayStatus ? "true" : "false") + ",";
-    json += "\"temperature\":" + String(_ACRelayStatus ? "true" : "false");
+    json += "\"temperature\":" + String(_ACRelayStatus ? "true" : "false") + ",";
+    json += "\"ahu\":" + String(_ahuRelayStatus ? "true" : "false") + ",";
+    json += "\"humidifier\":" + String(_humidifierRelayStatus ? "true" : "false") + ",";
+    json += "\"duct_fan\":" + String(_ductFanRelayStatus ? "true" : "false") + ",";
+    json += "\"extra\":" + String(_extraRelayStatus ? "true" : "false");
     json += "}}";
 
     Serial.println("POST " + url);

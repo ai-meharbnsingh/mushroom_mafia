@@ -64,6 +64,10 @@ SensirionI2CScd4x scd4x;
 bool _co2RelayStatus = 0;
 bool _humidityRelayStatus = 0;
 bool _ACRelayStatus = 0;
+bool _ahuRelayStatus = 0;
+bool _humidifierRelayStatus = 0;
+bool _ductFanRelayStatus = 0;
+bool _extraRelayStatus = 0;
 
 // Legacy device key — kept for backward compatibility with old EEPROM data
 char deviceKey[12];
@@ -95,7 +99,7 @@ const char* provisionEndpoint = "/device/provision/";  // + license_key
 #define HTTP_CODE_UNAUTHORIZED 400
 
 // ─── EEPROM Layout ───────────────────────────────────────────────
-// Expanded to 256 bytes to accommodate MQTT provisioning data.
+// Expanded to 512 bytes to accommodate MQTT provisioning + expanded relays.
 //
 // Addr  Size  Description
 // ----  ----  ----------------------------------------
@@ -112,6 +116,10 @@ const char* provisionEndpoint = "/device/provision/";  // + license_key
 //  39    64   Device password (for MQTT auth)
 // 103    64   MQTT broker host
 // 167     4   MQTT broker port (int)
+// 171     1   AHU relay status (bool)
+// 172     1   Humidifier relay status (bool)
+// 173     1   Duct fan relay status (bool)
+// 174     1   Extra relay status (bool)
 // ─────────────────────────────────────────────────────────────────
 
 #define ADDR_CO2_RELAY_STATUS 0
@@ -128,14 +136,21 @@ const char* provisionEndpoint = "/device/provision/";  // + license_key
 #define ADDR_DEVICE_PASSWORD 39   // 64 bytes for MQTT password
 #define ADDR_MQTT_HOST 103        // 64 bytes for MQTT broker host
 #define ADDR_MQTT_PORT 167        // 4 bytes (int)
+#define ADDR_AHU_RELAY_STATUS 171
+#define ADDR_HUM2_RELAY_STATUS 172
+#define ADDR_DUCT_RELAY_STATUS 173
+#define ADDR_EXTRA_RELAY_STATUS 174
 
-#define EEPROM_MEMORY_SIZE 256
+#define EEPROM_MEMORY_SIZE 512
 
 // Relays
 #define HUMIDITY_RELAY_1 23
 #define TEMP_RELAY_2 4  // for the ac
 #define CO2_RELAY_3 16
-//#define EXTRA_RELAY_4 23
+#define AHU_RELAY_4 13
+#define HUMIDIFIER_RELAY_5 14
+#define DUCT_FAN_RELAY_6 27
+#define EXTRA_RELAY_7 25
 
 uint16_t CO2MinValue = 1200;
 float tempMinValue = 16;
@@ -155,6 +170,7 @@ unsigned long lastTimeAuthentication = 0;
 
 unsigned long menuDisplayDelay = 120000;   // menuy timer 2 minutes
 unsigned long lastMillis = 0;             // stores current time of http req
+unsigned long lastWifiReconnectAttempt = 0;  // WiFi reconnect backoff tracker
 unsigned long timerDelay = 30000;  // 30 seconds (was 300000 = 5 minutes)
 
 int deviceId = -1;  // Set after registration, stored in EEPROM

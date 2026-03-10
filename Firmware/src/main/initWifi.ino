@@ -1,5 +1,4 @@
 bool serverStarted = false;
-unsigned long lastWifiReconnectAttempt = 0;
 
 // Non-blocking WiFi reconnect — used in main loop, does NOT reboot on failure
 bool reconnectWiFi() {
@@ -64,7 +63,16 @@ void setupServer() {
     json += "\"free_heap\":" + String(ESP.getFreeHeap()) + ",";
     json += "\"uptime_s\":" + String(millis() / 1000) + ",";
     json += "\"mqtt_provisioned\":" + String(mqttProvisioned ? "true" : "false") + ",";
-    json += "\"device_id\":" + String(deviceId);
+    json += "\"device_id\":" + String(deviceId) + ",";
+    json += "\"relay_states\":{";
+    json += "\"co2\":" + String(_co2RelayStatus ? "true" : "false") + ",";
+    json += "\"humidity\":" + String(_humidityRelayStatus ? "true" : "false") + ",";
+    json += "\"temperature\":" + String(_ACRelayStatus ? "true" : "false") + ",";
+    json += "\"ahu\":" + String(_ahuRelayStatus ? "true" : "false") + ",";
+    json += "\"humidifier\":" + String(_humidifierRelayStatus ? "true" : "false") + ",";
+    json += "\"duct_fan\":" + String(_ductFanRelayStatus ? "true" : "false") + ",";
+    json += "\"extra\":" + String(_extraRelayStatus ? "true" : "false");
+    json += "}";
     json += "}";
     request->send(200, "application/json", json);
   });
