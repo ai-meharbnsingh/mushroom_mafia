@@ -29,14 +29,29 @@ void setupMQTT() {
     Serial.println(mqttBrokerPort);
 }
 
+// Track consecutive MQTT failures (only counted when WiFi IS connected)
+int mqttConsecutiveFailures = 0;
+
 bool connectMQTT() {
+    // If WiFi is down, don't attempt MQTT and don't count as a failure
+    if (WiFi.status() != WL_CONNECTED) {
+        Serial.println("MQTT connect skipped — WiFi is down");
+        return false;
+    }
+
     String clientId = String(licenseKey);
     // LWT: publish offline status on unexpected disconnect
     String statusTopic = "device/" + clientId + "/status";
     String lwtPayload = "{\"status\":\"offline\"}";
 
-    int maxRetries = 5;
+    int maxRetries = 20;
     for (int attempt = 1; attempt <= maxRetries && !mqttClient.connected(); attempt++) {
+        // Re-check WiFi before each attempt
+        if (WiFi.status() != WL_CONNECTED) {
+            Serial.println("MQTT attempt aborted — WiFi dropped mid-retry");
+            return false;  // Don't count as MQTT failure
+        }
+
         lcd.clear();
         lcd.setCursor(0, 0);
         lcd.print("MQTT Try: ");
@@ -51,6 +66,7 @@ bool connectMQTT() {
             Serial.println("MQTT Connected");
             lcd.setCursor(0, 1);
             lcd.print("MQTT Connected!");
+            mqttConsecutiveFailures = 0;  // Reset failure counter on success
 
             // Subscribe to command topics
             String cmdTopic = "device/" + clientId + "/commands";
@@ -78,17 +94,28 @@ bool connectMQTT() {
         }
     }
 
-    // All retries failed — fall back to HTTP bootstrap mode
-    Serial.println("MQTT connection failed after all retries. Clearing provisioning, rebooting to HTTP mode.");
+    // All retries exhausted WITH WiFi connected — count as real MQTT failure
+    mqttConsecutiveFailures++;
+    Serial.printf("MQTT failed with WiFi up (%d consecutive)\n", mqttConsecutiveFailures);
+
+    if (mqttConsecutiveFailures >= 20) {
+        // Only clear provisioning after 20 consecutive real MQTT failures
+        Serial.println("MQTT: 20 consecutive failures with WiFi up. Clearing provisioning, rebooting to HTTP mode.");
+        lcd.clear();
+        lcd.print("MQTT FAILED x20");
+        lcd.setCursor(0, 1);
+        lcd.print("Fallback to HTTP");
+        EEPROM.write(ADDR_MQTT_PROVISIONED, 255);
+        EEPROM.commit();
+        delay(3000);
+        ESP.restart();
+    }
+
     lcd.clear();
     lcd.print("MQTT FAILED");
     lcd.setCursor(0, 1);
-    lcd.print("Fallback to HTTP");
-    EEPROM.write(ADDR_MQTT_PROVISIONED, 255);
-    EEPROM.commit();
-    delay(3000);
-    ESP.restart();
-    return false;  // unreachable, but keeps compiler happy
+    lcd.print("Will retry later");
+    return false;
 }
 
 void mqttCallback(char* topic, byte* payload, unsigned int length) {

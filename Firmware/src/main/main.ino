@@ -58,6 +58,30 @@ void loop() {
         // ═══════════════════════════════════════════
         //  MQTT RUNTIME MODE
         // ═══════════════════════════════════════════
+
+        // WiFi resilience: check connection before MQTT operations
+        if (WiFi.status() != WL_CONNECTED) {
+            lcd.setCursor(0, 3);
+            lcd.print("WiFi: DOWN          ");
+            // Backoff: only try reconnect every 10 seconds
+            if (currentTime - lastWifiReconnectAttempt >= 10000) {
+                lastWifiReconnectAttempt = currentTime;
+                reconnectWiFi();
+            }
+            if (WiFi.status() != WL_CONNECTED) {
+                // WiFi still down — skip MQTT ops, keep reading sensors locally
+                readBagSensorNew();
+                readFromCO2();
+                readDHTSensor();
+                checkForRelay();
+                delay(1000);
+                return;
+            }
+        } else {
+            lcd.setCursor(0, 3);
+            lcd.print("WiFi: OK            ");
+        }
+
         mqttLoop();  // Process incoming MQTT messages
 
         if (deviceDisabled) {
@@ -85,6 +109,19 @@ void loop() {
         // ═══════════════════════════════════════════
         //  HTTP BOOTSTRAP MODE (existing behavior + provision polling)
         // ═══════════════════════════════════════════
+
+        // WiFi resilience: check connection before HTTP operations
+        if (WiFi.status() != WL_CONNECTED) {
+          lcd.setCursor(0, 3);
+          lcd.print("WiFi: DOWN          ");
+          if (currentTime - lastWifiReconnectAttempt >= 10000) {
+            lastWifiReconnectAttempt = currentTime;
+            reconnectWiFi();
+          }
+        } else {
+          lcd.setCursor(0, 3);
+          lcd.print("WiFi: OK            ");
+        }
 
         // After every 30 minutes: re-authenticate device key + heartbeat
         if(currentTime - lastTimeAuthentication > keyAuthenticationTimer) {
@@ -117,23 +154,22 @@ void loop() {
           checkForRelay();
         }
         else {
-          lcd.setCursor(0,3);
-          lcd.print(" SENDING DATA ONLINE ");
-          Serial.println("SENDING HTTP REQUEST");
-          sendHTTPRequest();
+          // Check WiFi before sending HTTP data
+          if (WiFi.status() == WL_CONNECTED) {
+            lcd.setCursor(0,3);
+            lcd.print(" SENDING DATA ONLINE ");
+            Serial.println("SENDING HTTP REQUEST");
+            sendHTTPRequest();
 
-          // Poll for MQTT provisioning credentials
-          pollProvisionEndpoint();
+            // Poll for MQTT provisioning credentials
+            pollProvisionEndpoint();
+          } else {
+            lcd.setCursor(0,3);
+            lcd.print("WiFi DOWN-skip HTTP ");
+            Serial.println("WiFi down — skipping HTTP request");
+          }
 
           lastTime = currentTime;
-          if (WiFi.status() != WL_CONNECTED) {
-            lcd.setCursor(0,3);
-            lcd.print(" WiFi DISCONNECTED  ");
-          }
-          else {
-            lcd.setCursor(0,3);
-            lcd.print("                    ");
-          }
           delay(2000);
         }
     }

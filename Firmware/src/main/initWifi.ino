@@ -1,4 +1,33 @@
 bool serverStarted = false;
+unsigned long lastWifiReconnectAttempt = 0;
+
+// Non-blocking WiFi reconnect — used in main loop, does NOT reboot on failure
+bool reconnectWiFi() {
+    lcd.setCursor(0, 0);
+    lcd.print("WiFi Reconnecting...");
+    Serial.println("WiFi reconnecting (non-blocking)...");
+
+    WiFi.reconnect();  // ESP32 remembers last SSID/password
+
+    unsigned long startAttemptTime = millis();
+    while (WiFi.status() != WL_CONNECTED && millis() - startAttemptTime < 30000) {
+        delay(500);
+        Serial.print(".");
+    }
+
+    if (WiFi.status() == WL_CONNECTED) {
+        Serial.println("\nWiFi reconnected! IP: " + WiFi.localIP().toString());
+        lcd.setCursor(0, 0);
+        lcd.print("WiFi: RECONNECTED   ");
+        setupServer();  // Ensure web server is running
+        return true;
+    }
+
+    Serial.println("\nWiFi reconnect failed.");
+    lcd.setCursor(0, 0);
+    lcd.print("WiFi: DOWN          ");
+    return false;
+}
 
 void setupServer() {
   if (serverStarted) return;

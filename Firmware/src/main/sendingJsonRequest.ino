@@ -10,7 +10,8 @@
 void sendHTTPRequest() {
     if(WiFi.status() != WL_CONNECTED) {
         lcd.setCursor(0,3);
-        lcd.print(" WiFi DISCONNECTED  ");
+        lcd.print("WiFi DOWN-no send   ");
+        Serial.println("HTTP send skipped — WiFi down");
         return;
     }
 
@@ -70,6 +71,12 @@ void sendHTTPRequest() {
 
 void pollRelayCommands() {
     if (deviceId <= 0) return;
+    if (WiFi.status() != WL_CONNECTED) {
+        lcd.setCursor(0,3);
+        lcd.print("WiFi DOWN-no poll   ");
+        Serial.println("Relay poll skipped — WiFi down");
+        return;
+    }
 
     WiFiClient client;
     HTTPClient http;
