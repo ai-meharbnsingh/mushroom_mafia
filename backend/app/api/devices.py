@@ -60,25 +60,38 @@ async def list_devices(
 ):
     """List devices. Join rooms->plants to filter by owner_id.
     Include unassigned devices (room_id=null) that belong to the owner's rooms."""
-    # Devices assigned to rooms owned by current user's organization
+    assigned_conditions = [
+        Plant.owner_id == current_user.owner_id,
+        Device.is_active == True,
+    ]
+    unassigned_conditions = [
+        Device.room_id.is_(None),
+        Device.is_active == True,
+    ]
+
+    is_admin = current_user.role in [UserRole.SUPER_ADMIN, UserRole.ADMIN]
+
+    if not is_admin:
+        if not current_user.assigned_plants:
+            return [] # Non-admins with no plants see no devices
+        assigned_ids = [int(pid) for pid in current_user.assigned_plants]
+        assigned_conditions.append(Plant.plant_id.in_(assigned_ids))
+        # Non-admins do not see unassigned devices by default (or maybe they shouldn't)
+        # We will set unassigned_conditions to False for non-admins to hide unassigned devices
+        unassigned_conditions.append(False)
+
+    # Devices assigned to rooms owned by current user's organization (and assigned plants)
     assigned_query = (
         select(Device)
         .join(Room, Device.room_id == Room.room_id)
         .join(Plant, Room.plant_id == Plant.plant_id)
-        .where(
-            Plant.owner_id == current_user.owner_id,
-            Device.is_active == True,
-        )
+        .where(*assigned_conditions)
     )
     result_assigned = await db.execute(assigned_query)
     assigned_devices = result_assigned.scalars().all()
 
-    # Unassigned devices (room_id is null) — these are globally visible
-    # to admins/super_admins, otherwise just show assigned ones
-    unassigned_query = select(Device).where(
-        Device.room_id.is_(None),
-        Device.is_active == True,
-    )
+    # Unassigned devices
+    unassigned_query = select(Device).where(*unassigned_conditions)
     result_unassigned = await db.execute(unassigned_query)
     unassigned_devices = result_unassigned.scalars().all()
 

@@ -11,15 +11,13 @@ export function useWebSocketSimulation() {
   const reconnectTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const connect = useCallback(() => {
-    const token = localStorage.getItem('access_token');
-    if (!token) return;
 
     // Close existing connection if any
     if (wsRef.current) {
       wsRef.current.close();
     }
 
-    const ws = new WebSocket(`${WS_BASE_URL}/ws?token=${token}`);
+    const ws = new WebSocket(`${WS_BASE_URL}/ws`);
 
     ws.onopen = () => {
       console.log('[WebSocket] Connected');

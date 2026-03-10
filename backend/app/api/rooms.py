@@ -19,13 +19,17 @@ async def list_rooms(
     db: AsyncSession = Depends(get_db),
 ):
     """List rooms. Join with plants to filter by owner_id."""
+    conditions = [Plant.owner_id == current_user.owner_id, Room.is_active == True]
+    if current_user.role not in [UserRole.SUPER_ADMIN, UserRole.ADMIN]:
+        if not current_user.assigned_plants:
+            return []
+        assigned_ids = [int(pid) for pid in current_user.assigned_plants]
+        conditions.append(Plant.plant_id.in_(assigned_ids))
+
     result = await db.execute(
         select(Room)
         .join(Plant, Room.plant_id == Plant.plant_id)
-        .where(
-            Plant.owner_id == current_user.owner_id,
-            Room.is_active == True,
-        )
+        .where(*conditions)
     )
     return result.scalars().all()
 

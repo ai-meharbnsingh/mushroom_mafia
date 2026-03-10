@@ -37,6 +37,8 @@ class Device(Base):
     linked_by_user_id = Column(Integer, ForeignKey("users.user_id"), nullable=True)
     linked_at = Column(DateTime, nullable=True)
     qr_code_image = Column(Text, nullable=True)
+    ota_status = Column(String(20), nullable=True, default="idle")
+    last_ota_at = Column(DateTime, nullable=True)
     registered_at = Column(DateTime, server_default=func.now())
     updated_at = Column(DateTime, server_default=func.now(), onupdate=func.now())
 
@@ -45,6 +47,8 @@ class Device(Base):
     assigned_plant = relationship("Plant", foreign_keys=[assigned_to_plant_id])
     readings = relationship("RoomReading", back_populates="device")
     relay_statuses = relationship("RelayStatus", back_populates="device")
+    relay_configs = relationship("RelayConfig", back_populates="device")
+    relay_schedules = relationship("RelaySchedule", back_populates="device")
     alerts = relationship("Alert", back_populates="device")
 
     __table_args__ = (

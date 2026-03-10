@@ -17,6 +17,8 @@
 #include <ArduinoJson.h>
 #include <PubSubClient.h>                // MQTT client — install via Arduino Library Manager: "PubSubClient by Nick O'Leary"
 #include <DNSServer.h>                   // DNS server for captive portal redirect
+#include <Update.h>                      // Arduino OTA Update library
+#include <esp_ota_ops.h>                 // ESP-IDF OTA partition operations (dual-partition rollback)
 
 int row = 0;
 int column = 0;
@@ -152,6 +154,11 @@ const char* provisionEndpoint = "/device/provision/";  // + license_key
 #define ADDR_WIFI_PASSWORD 209     // 1 byte length + up to 64 chars
 
 #define EEPROM_MEMORY_SIZE 512
+
+// ─── OTA Configuration ─────────────────────────────────────────────
+const char* FIRMWARE_VERSION = "1.0.0";
+#define OTA_VALIDATION_TIMEOUT 60000   // 60s to validate new firmware after boot
+#define OTA_MAX_DOWNLOAD_SIZE 1900000  // ~1.9MB max firmware binary size
 
 // Relays
 #define HUMIDITY_RELAY_1 23

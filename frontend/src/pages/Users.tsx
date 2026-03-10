@@ -1,6 +1,6 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { gsap } from 'gsap';
-import { Plus, Search, Edit2, Lock } from 'lucide-react';
+import { Plus, Search, Edit2, Lock, RefreshCw, Loader2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import {
@@ -30,12 +30,15 @@ export const Users: React.FC = () => {
   const { state, dispatch } = useApp();
   const toast = useToast();
   const tableRef = useRef<HTMLDivElement>(null);
-  
+
   const [searchQuery, setSearchQuery] = useState('');
   const [roleFilter, setRoleFilter] = useState<UserRole | 'ALL'>('ALL');
   const [isDrawerOpen, setIsDrawerOpen] = useState(false);
   const [editingUser, setEditingUser] = useState<User | null>(null);
-  
+  const [isLoading, setIsLoading] = useState(false);
+  const [fetchError, setFetchError] = useState<string | null>(null);
+  const hasFetched = useRef(false);
+
   const [formData, setFormData] = useState<UserFormData>({
     username: '',
     email: '',
@@ -46,7 +49,31 @@ export const Users: React.FC = () => {
     role: 'OPERATOR',
     assignedPlants: [],
   });
-  
+
+  // Fetch users from the API -- runs on mount and can be triggered manually for retry
+  const fetchUsers = useCallback(async () => {
+    setIsLoading(true);
+    setFetchError(null);
+    try {
+      const res = await userService.getAll();
+      const users = (Array.isArray(res) ? res : []).map(mapUser);
+      dispatch({ type: 'SET_USERS', payload: users });
+    } catch (err: any) {
+      const msg = err?.response?.data?.detail || 'Failed to load users';
+      setFetchError(msg);
+    } finally {
+      setIsLoading(false);
+    }
+  }, [dispatch]);
+
+  // Always fetch users on mount to guarantee fresh data
+  useEffect(() => {
+    if (!hasFetched.current) {
+      hasFetched.current = true;
+      fetchUsers();
+    }
+  }, [fetchUsers]);
+
   useEffect(() => {
     if (tableRef.current) {
       gsap.fromTo(
@@ -55,7 +82,7 @@ export const Users: React.FC = () => {
         { opacity: 1, y: 0, duration: 0.3, stagger: 0.03, ease: 'power3.out' }
       );
     }
-  }, []);
+  }, [state.users]);
   
   // Filter users
   const filteredUsers = state.users.filter(user => {
@@ -179,7 +206,25 @@ export const Users: React.FC = () => {
       </div>
       
       {/* Table */}
-      {filteredUsers.length > 0 ? (
+      {isLoading ? (
+        <div className="flex flex-col items-center justify-center py-20 text-iot-muted">
+          <Loader2 className="w-8 h-8 animate-spin mb-3 text-iot-cyan" />
+          <p className="text-sm">Loading users...</p>
+        </div>
+      ) : fetchError ? (
+        <div className="flex flex-col items-center justify-center py-20 text-iot-muted">
+          <p className="text-sm text-iot-red mb-3">{fetchError}</p>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={fetchUsers}
+            className="border-iot-subtle text-iot-secondary hover:text-iot-primary"
+          >
+            <RefreshCw className="w-4 h-4 mr-2" />
+            Retry
+          </Button>
+        </div>
+      ) : filteredUsers.length > 0 ? (
         <div
           ref={tableRef}
           className="bg-iot-secondary rounded-2xl border border-iot-subtle overflow-hidden"
@@ -263,10 +308,14 @@ export const Users: React.FC = () => {
       ) : (
         <EmptyState
           icon={Search}
-          title="No users found"
-          description="Try adjusting your filters or create a new user."
-          actionLabel="Create User"
-          onAction={() => handleOpenDrawer()}
+          title={state.users.length === 0 ? 'No users loaded' : 'No users found'}
+          description={
+            state.users.length === 0
+              ? 'Users could not be loaded. Try refreshing or create a new user.'
+              : 'Try adjusting your filters or create a new user.'
+          }
+          actionLabel={state.users.length === 0 ? 'Refresh' : 'Create User'}
+          onAction={state.users.length === 0 ? fetchUsers : () => handleOpenDrawer()}
         />
       )}
       

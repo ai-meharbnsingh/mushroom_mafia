@@ -27,6 +27,7 @@ import { Alerts } from '@/pages/Alerts';
 import { Reports } from '@/pages/Reports';
 import { Users } from '@/pages/Users';
 import { Profile } from '@/pages/Profile';
+import { FirmwareManagement } from '@/pages/FirmwareManagement';
 
 // Protected Route Component
 const ProtectedRoute: React.FC<{ children: React.ReactNode }> = ({ children }) => {
@@ -196,6 +197,14 @@ function App() {
                   element={
                     <AdminRoute>
                       <Users />
+                    </AdminRoute>
+                  }
+                />
+                <Route
+                  path="firmware"
+                  element={
+                    <AdminRoute>
+                      <FirmwareManagement />
                     </AdminRoute>
                   }
                 />

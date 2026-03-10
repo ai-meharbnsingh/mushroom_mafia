@@ -28,5 +28,7 @@ class Room(Base):
     plant = relationship("Plant", back_populates="rooms")
     devices = relationship("Device", back_populates="room")
     thresholds = relationship("Threshold", back_populates="room")
+    harvests = relationship("Harvest", back_populates="room")
+    growth_cycles = relationship("GrowthCycle", back_populates="room")
 
     __table_args__ = (Index("idx_rooms_plant", "plant_id"),)

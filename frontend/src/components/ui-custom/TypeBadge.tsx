@@ -21,11 +21,15 @@ export const TypeBadge: React.FC<TypeBadgeProps> = ({ type, variant }) => {
     STORAGE: { bg: 'rgba(109, 116, 132, 0.15)', color: '#A7ACB8' },
   };
   
-  const reportColors: Record<ReportType, { bg: string; color: string }> = {
+  const reportColors: Record<string, { bg: string; color: string }> = {
     DAILY: { bg: 'rgba(46, 239, 255, 0.15)', color: '#2EEFFF' },
     WEEKLY: { bg: 'rgba(178, 108, 255, 0.15)', color: '#B26CFF' },
     MONTHLY: { bg: 'rgba(255, 209, 102, 0.15)', color: '#FFD166' },
     CUSTOM: { bg: 'rgba(109, 116, 132, 0.15)', color: '#A7ACB8' },
+    DAILY_SUMMARY: { bg: 'rgba(46, 239, 255, 0.15)', color: '#2EEFFF' },
+    WEEKLY_SUMMARY: { bg: 'rgba(178, 108, 255, 0.15)', color: '#B26CFF' },
+    ALERT_REPORT: { bg: 'rgba(255, 45, 85, 0.15)', color: '#FF2D55' },
+    HARVEST_REPORT: { bg: 'rgba(39, 251, 107, 0.15)', color: '#27FB6B' },
   };
   
   const formatColors: Record<ReportFormat, { bg: string; color: string }> = {

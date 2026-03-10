@@ -201,7 +201,7 @@ export interface Alert {
 }
 
 // Report Types
-export type ReportType = 'DAILY' | 'WEEKLY' | 'MONTHLY' | 'CUSTOM';
+export type ReportType = 'DAILY' | 'WEEKLY' | 'MONTHLY' | 'CUSTOM' | 'DAILY_SUMMARY' | 'WEEKLY_SUMMARY' | 'ALERT_REPORT' | 'HARVEST_REPORT';
 export type ReportFormat = 'PDF' | 'EXCEL' | 'CSV';
 
 export interface Report {
@@ -214,6 +214,7 @@ export interface Report {
   dateFrom: string;
   dateTo: string;
   fileSize: string;
+  filePath?: string;
   generatedBy: string;
   generatedAt: string;
   fileUrl?: string;
@@ -343,6 +344,7 @@ export interface ReportFormData {
   dateTo: string;
   type: ReportType;
   format: ReportFormat;
+  reportName?: string;
 }
 
 export interface PasswordFormData {
@@ -364,6 +366,63 @@ export interface Toast {
     label: string;
     onClick: () => void;
   };
+}
+
+// Firmware / OTA Types
+export interface FirmwareVersion {
+  firmwareId: number;
+  version: string;
+  checksumSha256: string;
+  fileSize: number;
+  releaseNotes: string | null;
+  createdAt: string;
+  isActive: boolean;
+}
+
+export interface OTADeviceStatus {
+  deviceId: number;
+  deviceName: string;
+  firmwareVersion: string | null;
+  otaStatus: string | null;
+  lastOtaAt: string | null;
+}
+
+// Harvest Types
+export type HarvestGrade = 'A' | 'B' | 'C';
+export type GrowthStage = 'INOCULATION' | 'SPAWN_RUN' | 'INCUBATION' | 'FRUITING' | 'HARVEST' | 'IDLE';
+
+export interface Harvest {
+  harvestId: number;
+  roomId: number;
+  harvestedAt: string;
+  weightKg: number;
+  grade: HarvestGrade;
+  notes?: string;
+  recordedBy: number;
+  createdAt: string;
+}
+
+export interface HarvestSummary {
+  totalWeightKg: number;
+  totalHarvests: number;
+  gradeBreakdown: Record<string, number>;
+  period: string;
+}
+
+export interface GrowthCycle {
+  cycleId: number;
+  roomId: number;
+  startedAt: string;
+  currentStage: GrowthStage;
+  stageChangedAt?: string;
+  expectedHarvestDate?: string;
+  targetYieldKg?: number;
+  notes?: string;
+  autoAdjustThresholds: boolean;
+  createdBy: number;
+  isActive: boolean;
+  createdAt: string;
+  updatedAt: string;
 }
 
 // Filter Types
@@ -393,4 +452,72 @@ export interface DeviceFilters {
   subscriptionStatus?: SubscriptionStatus;
   assigned?: boolean;
   search?: string;
+}
+
+// Relay Mode Types
+export type RelayMode = 'MANUAL' | 'AUTO' | 'SCHEDULE';
+
+export interface RelayConfig {
+  relayType: RelayType;
+  mode: RelayMode;
+  thresholdParam: string | null;
+  actionOnHigh: string;
+  actionOnLow: string;
+}
+
+export interface RelayScheduleItem {
+  scheduleId: number;
+  relayType: RelayType;
+  daysOfWeek: number;
+  timeOn: string;
+  timeOff: string;
+  isActive: boolean;
+}
+
+// Climate Advisory Types
+export interface ClimateGuideline {
+  guidelineId: number;
+  plantType: string;
+  growthStage: GrowthStage;
+  tempMin: number | null;
+  tempMax: number | null;
+  humidityMin: number | null;
+  humidityMax: number | null;
+  co2Min: number | null;
+  co2Max: number | null;
+  tempHysteresis: number;
+  humidityHysteresis: number;
+  co2Hysteresis: number;
+  durationDaysMin: number | null;
+  durationDaysMax: number | null;
+  notes: string | null;
+}
+
+export interface ClimateDeviation {
+  parameter: 'CO2' | 'TEMPERATURE' | 'HUMIDITY';
+  direction: 'too_high' | 'too_low' | 'ok' | 'not_set';
+  current: number | null;
+  recommended: number | null;
+  severity: 'ok' | 'warning' | 'critical';
+}
+
+export interface ClimateAdvisory {
+  roomId: number;
+  currentStage: GrowthStage;
+  plantType: string;
+  recommended: ClimateGuideline | null;
+  currentThresholds: {
+    co2: { min: number; max: number };
+    temperature: { min: number; max: number };
+    humidity: { min: number; max: number };
+  };
+  deviations: ClimateDeviation[];
+  daysInStage: number;
+  stageDurationMin: number | null;
+  stageDurationMax: number | null;
+  transitionReminder: string | null;
+  nextStage: GrowthStage | null;
+  nextStagePreview: ClimateGuideline | null;
+  autoAdjustEnabled: boolean;
+  suggestions: string[];
 }

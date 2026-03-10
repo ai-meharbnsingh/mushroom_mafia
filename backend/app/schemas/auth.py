@@ -1,3 +1,4 @@
+from typing import Optional
 from pydantic import BaseModel
 
 from .user import UserResponse
@@ -16,7 +17,7 @@ class TokenResponse(BaseModel):
 
 
 class RefreshRequest(BaseModel):
-    refresh_token: str
+    refresh_token: Optional[str] = None
 
 
 class ChangePasswordRequest(BaseModel):

@@ -1,7 +1,8 @@
-from datetime import datetime
+from datetime import date, datetime
 from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi.responses import StreamingResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 
@@ -13,6 +14,7 @@ from app.models.room_reading import RoomReading
 from app.models.plant import Plant
 from app.schemas.reading import ReadingResponse
 from app.api.deps import get_current_user
+from app.services.report_generator import stream_readings_csv
 
 router = APIRouter()
 
@@ -121,3 +123,42 @@ async def get_device_readings(
 
     result = await db.execute(query)
     return result.scalars().all()
+
+
+@router.get("/export")
+async def export_readings(
+    room_id: int = Query(..., description="Room ID to export readings for"),
+    from_date: date = Query(..., alias="from", description="Start date (YYYY-MM-DD)"),
+    to_date: date = Query(..., alias="to", description="End date (YYYY-MM-DD)"),
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Export room readings as a CSV file download.
+
+    Streams up to 50,000 rows as CSV with columns: timestamp, co2_ppm,
+    room_temp, room_humidity, outdoor_temp, outdoor_humidity, bag_temp_1..10.
+    """
+    # Verify room ownership
+    ownership = await db.execute(
+        select(Plant.owner_id)
+        .join(Room, Room.plant_id == Plant.plant_id)
+        .where(Room.room_id == room_id)
+    )
+    owner_id = ownership.scalar_one_or_none()
+    if owner_id is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Room not found"
+        )
+    if owner_id != current_user.owner_id:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Not allowed to export readings for this room",
+        )
+
+    filename = f"readings_room{room_id}_{from_date}_{to_date}.csv"
+
+    return StreamingResponse(
+        stream_readings_csv(db, room_id, from_date, to_date),
+        media_type="text/csv",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )

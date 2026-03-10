@@ -1,4 +1,4 @@
-from fastapi import Depends, Header, HTTPException, status
+from fastapi import Depends, Header, HTTPException, status, Request
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
@@ -9,15 +9,29 @@ from app.models.device import Device
 from app.models.enums import SubscriptionStatus
 from app.utils.security import decode_token
 
-security = HTTPBearer()
+security = HTTPBearer(auto_error=False)
 
 
 async def get_current_user(
+    request: Request,
     credentials: HTTPAuthorizationCredentials = Depends(security),
     db: AsyncSession = Depends(get_db),
 ) -> User:
-    """Extract user from JWT token."""
-    token = credentials.credentials
+    """Extract user from JWT token from cookie or header and enforce CSRF."""
+    if request.method in ["POST", "PUT", "DELETE", "PATCH"]:
+        csrf_cookie = request.cookies.get("csrf_token")
+        csrf_header = request.headers.get("x-csrf-token")
+        if not csrf_cookie or not csrf_header or csrf_cookie != csrf_header:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN, 
+                detail="CSRF token missing or invalid"
+            )
+
+    token = request.cookies.get("access_token")
+    if not token and credentials:
+        token = credentials.credentials
+    if not token:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Not authenticated")
     try:
         payload = decode_token(token)
         user_id = payload.get("sub")

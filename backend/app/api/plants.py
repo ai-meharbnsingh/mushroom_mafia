@@ -20,12 +20,14 @@ async def list_plants(
     db: AsyncSession = Depends(get_db),
 ):
     """List plants filtered by owner_id from JWT."""
-    result = await db.execute(
-        select(Plant).where(
-            Plant.owner_id == current_user.owner_id,
-            Plant.is_active == True,
-        )
-    )
+    conditions = [Plant.owner_id == current_user.owner_id, Plant.is_active == True]
+    if current_user.role not in [UserRole.SUPER_ADMIN, UserRole.ADMIN]:
+        if not current_user.assigned_plants:
+            return []
+        assigned_ids = [int(pid) for pid in current_user.assigned_plants]
+        conditions.append(Plant.plant_id.in_(assigned_ids))
+        
+    result = await db.execute(select(Plant).where(*conditions))
     return result.scalars().all()
 
 
@@ -44,6 +46,15 @@ async def get_plant(
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND, detail="Plant not found"
         )
+        
+    if current_user.role not in [UserRole.SUPER_ADMIN, UserRole.ADMIN]:
+        assigned_ids = [int(pid) for pid in (current_user.assigned_plants or [])]
+        if plant.plant_id not in assigned_ids:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Not allowed to view this plant",
+            )
+            
     if plant.owner_id != current_user.owner_id:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
@@ -145,6 +156,14 @@ async def get_plant_rooms(
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND, detail="Plant not found"
         )
+        
+    if current_user.role not in [UserRole.SUPER_ADMIN, UserRole.ADMIN]:
+        assigned_ids = [int(pid) for pid in (current_user.assigned_plants or [])]
+        if plant.plant_id not in assigned_ids:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Not allowed to view rooms for this plant",
+            )
     if plant.owner_id != current_user.owner_id:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,

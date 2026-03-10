@@ -21,6 +21,15 @@ from .relay import RelayCommand, RelayStateResponse
 from .alert import AlertResponse
 from .report import ReportGenerateRequest, ReportResponse
 from .dashboard import DashboardSummary
+from .firmware import FirmwareUpload, FirmwareResponse, OTARolloutRequest, OTAStatusResponse
+from .harvest import (
+    HarvestCreate,
+    HarvestResponse,
+    HarvestSummary,
+    GrowthCycleCreate,
+    GrowthCycleUpdate,
+    GrowthCycleResponse,
+)
 
 __all__ = [
     "LoginRequest",
@@ -60,4 +69,14 @@ __all__ = [
     "ReportGenerateRequest",
     "ReportResponse",
     "DashboardSummary",
+    "FirmwareUpload",
+    "FirmwareResponse",
+    "OTARolloutRequest",
+    "OTAStatusResponse",
+    "HarvestCreate",
+    "HarvestResponse",
+    "HarvestSummary",
+    "GrowthCycleCreate",
+    "GrowthCycleUpdate",
+    "GrowthCycleResponse",
 ]

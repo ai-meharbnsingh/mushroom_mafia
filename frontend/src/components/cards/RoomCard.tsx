@@ -26,9 +26,9 @@ export const RoomCard: React.FC<RoomCardProps> = ({
   const cardRef = useRef<HTMLDivElement>(null);
   const [isDataPulse, setIsDataPulse] = useState(false);
   const { state } = useApp();
-  
+
   const isOnline = reading && room.deviceId && state.wsConnected;
-  
+
   useEffect(() => {
     if (cardRef.current) {
       gsap.fromTo(
@@ -44,7 +44,7 @@ export const RoomCard: React.FC<RoomCardProps> = ({
       );
     }
   }, [index]);
-  
+
   // Data pulse animation when reading updates
   useEffect(() => {
     if (reading) {
@@ -53,11 +53,11 @@ export const RoomCard: React.FC<RoomCardProps> = ({
       return () => clearTimeout(timer);
     }
   }, [reading?.timestamp]);
-  
+
   const handleClick = () => {
     navigate(`/rooms/${room.id}`);
   };
-  
+
   // Get color for temperature based on thresholds
   const getTempColor = (temp: number) => {
     if (!thresholds) return '#27FB6B';
@@ -66,7 +66,7 @@ export const RoomCard: React.FC<RoomCardProps> = ({
     if ((temp >= min - 1 && temp < min) || (temp > max && temp <= max + 1)) return '#FFD166';
     return '#FF2D55';
   };
-  
+
   // Get color for humidity based on thresholds
   const getHumidityColor = (hum: number) => {
     if (!thresholds) return '#27FB6B';
@@ -75,7 +75,7 @@ export const RoomCard: React.FC<RoomCardProps> = ({
     if ((hum >= min - 2.5 && hum < min) || (hum > max && hum <= max + 2.5)) return '#FFD166';
     return '#FF2D55';
   };
-  
+
   // Get color for CO2 based on thresholds
   const getCO2Color = (co2: number) => {
     if (!thresholds) return '#27FB6B';
@@ -84,11 +84,11 @@ export const RoomCard: React.FC<RoomCardProps> = ({
     if ((co2 >= min - 100 && co2 < min) || (co2 > max && co2 <= max + 100)) return '#FFD166';
     return '#FF2D55';
   };
-  
+
   const lastUpdated = reading
     ? Math.floor((Date.now() - new Date(reading.timestamp).getTime()) / 1000)
     : null;
-  
+
   return (
     <div
       ref={cardRef}
@@ -106,7 +106,10 @@ export const RoomCard: React.FC<RoomCardProps> = ({
       <div className="flex items-center justify-between mb-4">
         <div>
           <h3 className="text-sm font-semibold text-iot-primary">{room.name}</h3>
-          <p className="text-xs text-iot-muted">{room.code}</p>
+          <p className="text-xs text-iot-muted mb-1">{room.code}</p>
+          <span className="inline-flex items-center rounded-md bg-iot-tertiary px-2 py-1 text-xs font-medium text-iot-secondary ring-1 ring-inset ring-iot-subtle">
+            Stage: {room.roomType?.replace('_', ' ') || 'UNKNOWN'}
+          </span>
         </div>
         <div className="flex items-center gap-2">
           {isOnline ? (
@@ -125,7 +128,7 @@ export const RoomCard: React.FC<RoomCardProps> = ({
           )}
         </div>
       </div>
-      
+
       {reading ? (
         <>
           {/* Gauges */}
@@ -140,7 +143,7 @@ export const RoomCard: React.FC<RoomCardProps> = ({
               getColor={getCO2Color}
             />
           </div>
-          
+
           {/* Small Gauges */}
           <div className="flex items-center justify-center gap-6 mb-4">
             <SmallGauge
@@ -162,17 +165,17 @@ export const RoomCard: React.FC<RoomCardProps> = ({
               getColor={getHumidityColor}
             />
           </div>
-          
+
           {/* Bag Temperature Strip */}
           <div className="mb-3">
             <BagTemperatureStrip bags={reading.bagTemperatures} maxBags={10} />
           </div>
-          
+
           {/* Outdoor Readings */}
           <div className="text-[10px] text-iot-muted mb-3">
             Outdoor: {reading.outdoorTemperature?.toFixed(1)}°C / {reading.outdoorHumidity}% RH
           </div>
-          
+
           {/* Relay Indicators */}
           <div className="flex items-center justify-center gap-4 mb-3">
             <RelayIndicator
@@ -191,7 +194,7 @@ export const RoomCard: React.FC<RoomCardProps> = ({
               trigger="AUTO"
             />
           </div>
-          
+
           {/* Last Updated */}
           <div className="text-center">
             <span className="text-[10px] text-iot-muted">

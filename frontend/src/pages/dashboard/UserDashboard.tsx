@@ -3,7 +3,9 @@ import { gsap } from 'gsap';
 import { Leaf, DoorOpen, Cpu, Bell } from 'lucide-react';
 import { MetricCard } from '@/components/cards/MetricCard';
 import { RoomCard } from '@/components/cards/RoomCard';
-import { SeverityBadge } from '@/components/ui-custom/SeverityBadge';
+import { YieldSummary } from '@/components/cards/YieldSummary';
+import { AlertWidget } from '@/components/cards/AlertWidget';
+import { EquipmentMatrix } from '@/components/cards/EquipmentMatrix';
 import { Button } from '@/components/ui/button';
 import { useApp } from '@/store/AppContext';
 import { useNavigate } from 'react-router-dom';
@@ -24,7 +26,7 @@ import {
 } from 'recharts';
 import { generateHistoricalData } from '@/lib/mockData';
 
-const CustomTooltip = ({ active, payload, label }: { active?: boolean; payload?: Array<{value: number}>; label?: string }) => {
+const CustomTooltip = ({ active, payload, label }: { active?: boolean; payload?: Array<{ value: number }>; label?: string }) => {
   if (active && payload && payload.length) {
     return (
       <div className="bg-iot-secondary border border-iot-subtle rounded-lg p-3">
@@ -118,8 +120,18 @@ export const UserDashboard: React.FC = () => {
         <p className="text-sm text-iot-secondary">Real-time monitoring overview</p>
       </div>
 
+      {/* Top Widgets Row */}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4" ref={el => { sectionRefs.current[1] = el; }}>
+        <div className="lg:col-span-1 h-[340px]">
+          <YieldSummary />
+        </div>
+        <div className="lg:col-span-2 h-[340px]">
+          <AlertWidget alerts={recentAlerts} onAcknowledge={handleAcknowledge} />
+        </div>
+      </div>
+
       {/* Summary Cards */}
-      <div ref={el => { sectionRefs.current[1] = el; }} className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+      <div ref={el => { sectionRefs.current[2] = el; }} className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mt-8">
         <MetricCard
           title="Total Plants"
           value={state.dashboardSummary.totalPlants}
@@ -147,7 +159,7 @@ export const UserDashboard: React.FC = () => {
       </div>
 
       {/* Room Sensor Grid */}
-      <div ref={el => { sectionRefs.current[2] = el; }}>
+      <div ref={el => { sectionRefs.current[3] = el; }} className="mt-8">
         <div className="flex items-center justify-between mb-4">
           <h2 className="text-lg font-semibold text-iot-primary">Live Room Sensors</h2>
           <Button
@@ -173,8 +185,13 @@ export const UserDashboard: React.FC = () => {
         </div>
       </div>
 
+      {/* Equipment Status Matrix */}
+      <div ref={el => { sectionRefs.current[4] = el; }} className="mt-8">
+        <EquipmentMatrix rooms={roomsWithReadings} />
+      </div>
+
       {/* Historical Charts */}
-      <div ref={el => { sectionRefs.current[3] = el; }}>
+      <div ref={el => { sectionRefs.current[5] = el; }} className="mt-8">
         <div className="flex items-center justify-between mb-4">
           <h2 className="text-lg font-semibold text-iot-primary">Historical Data</h2>
           <select className="input-dark text-sm py-1.5 px-3">
@@ -274,55 +291,6 @@ export const UserDashboard: React.FC = () => {
         </div>
       </div>
 
-      {/* Recent Alerts */}
-      <div ref={el => { sectionRefs.current[4] = el; }}>
-        <div className="flex items-center justify-between mb-4">
-          <h2 className="text-lg font-semibold text-iot-primary">Recent Alerts</h2>
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => navigate('/alerts')}
-            className="border-iot-subtle text-iot-secondary hover:text-iot-primary"
-          >
-            View All Alerts
-          </Button>
-        </div>
-
-        <div className="bg-iot-secondary rounded-2xl border border-iot-subtle overflow-hidden">
-          {recentAlerts.length > 0 ? (
-            <div className="divide-y divide-iot-subtle">
-              {recentAlerts.map((alert) => (
-                <div
-                  key={alert.id}
-                  className="flex items-center justify-between p-4 hover:bg-iot-tertiary/50 transition-colors"
-                >
-                  <div className="flex items-center gap-4">
-                    <SeverityBadge severity={alert.severity} />
-                    <div>
-                      <p className="text-sm text-iot-primary">{alert.message}</p>
-                      <p className="text-xs text-iot-muted mt-0.5">
-                        {alert.roomName} • {new Date(alert.createdAt).toLocaleTimeString()}
-                      </p>
-                    </div>
-                  </div>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => handleAcknowledge(alert)}
-                    className="border-iot-subtle text-iot-secondary hover:text-iot-primary"
-                  >
-                    Acknowledge
-                  </Button>
-                </div>
-              ))}
-            </div>
-          ) : (
-            <div className="p-8 text-center">
-              <p className="text-sm text-iot-muted">No active alerts</p>
-            </div>
-          )}
-        </div>
-      </div>
     </div>
   );
 };

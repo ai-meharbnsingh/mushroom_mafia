@@ -1,6 +1,9 @@
+import logging
+
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
+from sqlalchemy.orm import selectinload
 
 from app.database import get_db
 from app.models.threshold import Threshold
@@ -10,6 +13,9 @@ from app.models.user import User
 from app.models.enums import UserRole
 from app.schemas.threshold import ThresholdResponse, RoomThresholdsUpdate
 from app.api.deps import get_current_user, require_roles
+from app.services.mqtt_client import mqtt_manager
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
@@ -91,4 +97,41 @@ async def update_room_thresholds(
     # Refresh all updated thresholds
     for t in updated_thresholds:
         await db.refresh(t)
+
+    # Publish threshold config to all devices in this room via MQTT
+    try:
+        room_with_devices = await db.execute(
+            select(Room)
+            .options(selectinload(Room.devices))
+            .where(Room.room_id == room_id)
+        )
+        room_obj = room_with_devices.scalar_one_or_none()
+        if room_obj and room_obj.devices:
+            # Build config payload from all thresholds for this room
+            all_thresholds = await db.execute(
+                select(Threshold).where(Threshold.room_id == room_id)
+            )
+            config_payload = {}
+            for th in all_thresholds.scalars().all():
+                param = th.parameter.value.lower()  # CO2, HUMIDITY, TEMPERATURE
+                if th.min_value is not None:
+                    config_payload[f"{param}_min"] = float(th.min_value)
+                if th.max_value is not None:
+                    config_payload[f"{param}_max"] = float(th.max_value)
+                if th.hysteresis is not None:
+                    config_payload[f"{param}_hysteresis"] = float(th.hysteresis)
+
+            for device in room_obj.devices:
+                if device.is_online and device.license_key:
+                    await mqtt_manager.publish_config_update(
+                        device.license_key, config_payload
+                    )
+            logger.info(
+                "Threshold config synced to %d device(s) in room %d",
+                len([d for d in room_obj.devices if d.is_online]),
+                room_id,
+            )
+    except Exception as e:
+        logger.error("Failed to publish threshold config via MQTT: %s", e)
+
     return updated_thresholds

@@ -32,14 +32,19 @@ services:
       - "host.docker.internal:host-gateway"
     ports:
       - "1883:1883"
+      - "8883:8883"
       - "8083:8083"
       - "18083:18083"
     environment:
       EMQX_NODE__NAME: "emqx@emqx-node"
       EMQX_DASHBOARD__DEFAULT_PASSWORD: "admin123"
       EMQX_AUTHORIZATION__NO_MATCH: "allow"
+      EMQX_LISTENERS__SSL__DEFAULT__KEYFILE: "/opt/emqx/etc/certs/server.key"
+      EMQX_LISTENERS__SSL__DEFAULT__CERTFILE: "/opt/emqx/etc/certs/server.crt"
+      EMQX_LISTENERS__SSL__DEFAULT__CACERTFILE: "/opt/emqx/etc/certs/ca.crt"
     volumes:
       - emqx_data:/opt/emqx/data
+      - ./certs:/opt/emqx/etc/certs
     healthcheck:
       test: ["CMD", "emqx", "ctl", "status"]
       interval: 10s

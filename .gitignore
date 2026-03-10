@@ -18,3 +18,5 @@ traces/
 Firmware/.pio/
 Firmware/test_scd41/.pio/
 .pio/
+tools/qr_codes/
+backend/firmware_files/

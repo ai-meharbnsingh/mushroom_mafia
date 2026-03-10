@@ -124,16 +124,32 @@ export function mapUser(u: any): User {
 
 // --- Report ---
 export function mapReport(r: any): Report {
+  // file_size comes from backend as an integer (bytes) -- format it for display
+  const rawSize = r.file_size ?? r.fileSize;
+  let fileSize = '';
+  if (typeof rawSize === 'number' && rawSize > 0) {
+    if (rawSize >= 1048576) {
+      fileSize = `${(rawSize / 1048576).toFixed(1)} MB`;
+    } else if (rawSize >= 1024) {
+      fileSize = `${(rawSize / 1024).toFixed(1)} KB`;
+    } else {
+      fileSize = `${rawSize} B`;
+    }
+  } else if (typeof rawSize === 'string') {
+    fileSize = rawSize;
+  }
+
   return {
     id: String(r.report_id ?? r.id),
     name: r.report_name ?? r.name ?? '',
     type: (r.report_type ?? r.type ?? 'DAILY').toUpperCase(),
-    format: (r.report_format ?? r.format ?? 'PDF').toUpperCase(),
+    format: (r.report_format ?? r.format ?? 'CSV').toUpperCase(),
     plantId: r.plant_id ? String(r.plant_id) : r.plantId,
     plantName: r.plant_name ?? r.plantName,
     dateFrom: r.date_from ?? r.dateFrom ?? '',
     dateTo: r.date_to ?? r.dateTo ?? '',
-    fileSize: r.file_size ?? r.fileSize ?? '',
+    fileSize,
+    filePath: r.file_path ?? r.filePath,
     generatedBy: r.generated_by ? String(r.generated_by) : (r.generatedBy ?? ''),
     generatedAt: r.generated_at ?? r.generatedAt ?? new Date().toISOString(),
     fileUrl: r.file_url ?? r.fileUrl,

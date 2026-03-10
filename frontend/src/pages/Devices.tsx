@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { gsap } from 'gsap';
-import { Search, Filter, ChevronRight, Cpu, Plus, Copy, Check, ShieldAlert, ShieldOff, Ban, QrCode, CheckCircle, XCircle, Clock } from 'lucide-react';
+import { Search, Filter, ChevronRight, Cpu, Plus, Copy, Check, ShieldAlert, ShieldOff, Ban, QrCode, CheckCircle, XCircle, Clock, Upload } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import {
@@ -35,8 +35,9 @@ import { useApp } from '@/store/AppContext';
 import { useAuth } from '@/hooks/useAuth';
 import { useToast } from '@/hooks/useToast';
 import { deviceService } from '@/services/deviceService';
+import { firmwareService } from '@/services/firmwareService';
 import { mapDevice, mapPendingDevice } from '@/utils/mappers';
-import type { Device, SubscriptionStatus, PendingDevice } from '@/types';
+import type { Device, SubscriptionStatus, PendingDevice, FirmwareVersion } from '@/types';
 
 
 // Subscription status badge component
@@ -147,6 +148,13 @@ export const Devices: React.FC = () => {
   // View QR dialog state
   const [qrDialogOpen, setQrDialogOpen] = useState(false);
   const [qrDevice, setQrDevice] = useState<{ id: string; name: string } | null>(null);
+
+  // OTA update dialog state
+  const [otaDialogOpen, setOtaDialogOpen] = useState(false);
+  const [otaDevice, setOtaDevice] = useState<Device | null>(null);
+  const [otaFirmwareList, setOtaFirmwareList] = useState<FirmwareVersion[]>([]);
+  const [otaSelectedFirmwareId, setOtaSelectedFirmwareId] = useState<string>('');
+  const [otaLoading, setOtaLoading] = useState(false);
 
   useEffect(() => {
     if (tableRef.current) {
@@ -329,6 +337,34 @@ export const Devices: React.FC = () => {
     setTimeout(() => setLicenseCopied(false), 2000);
   };
 
+  const openOtaDialog = async (device: Device, e: React.MouseEvent) => {
+    e.stopPropagation();
+    setOtaDevice(device);
+    setOtaSelectedFirmwareId('');
+    setOtaDialogOpen(true);
+    try {
+      const list = await firmwareService.getFirmwareList();
+      setOtaFirmwareList(list);
+    } catch {
+      setOtaFirmwareList([]);
+    }
+  };
+
+  const handleOtaUpdate = async () => {
+    if (!otaDevice || !otaSelectedFirmwareId) return;
+    setOtaLoading(true);
+    try {
+      await firmwareService.triggerOTARollout(Number(otaSelectedFirmwareId), [Number(otaDevice.id)]);
+      toast.success(`OTA update triggered for ${otaDevice.name}`);
+      setOtaDialogOpen(false);
+      setOtaDevice(null);
+    } catch (err: any) {
+      toast.error(err?.response?.data?.detail || 'Failed to trigger OTA update');
+    } finally {
+      setOtaLoading(false);
+    }
+  };
+
   return (
     <div className="space-y-6">
       {/* Header */}
@@ -482,6 +518,7 @@ export const Devices: React.FC = () => {
                   <th>Name</th>
                   <th>MAC Address</th>
                   <th>License Key</th>
+                  <th>Firmware</th>
                   <th>Subscription</th>
                   <th>Mode</th>
                   <th>Assigned Room</th>
@@ -505,6 +542,9 @@ export const Devices: React.FC = () => {
                       <td className="font-mono text-xs">{device.macAddress}</td>
                       <td>
                         <LicenseKeyCell licenseKey={device.licenseKey} />
+                      </td>
+                      <td className="font-mono text-xs text-iot-secondary">
+                        {device.firmwareVersion || '-'}
                       </td>
                       <td>
                         <SubscriptionBadge status={device.subscriptionStatus} />
@@ -570,6 +610,15 @@ export const Devices: React.FC = () => {
 
                           {isAdmin && (
                             <>
+                              {/* OTA Update */}
+                              <button
+                                onClick={(e) => openOtaDialog(device, e)}
+                                className="p-1.5 rounded-lg text-iot-secondary hover:text-iot-purple hover:bg-iot-purple/10 transition-colors"
+                                title="Trigger OTA update"
+                              >
+                                <Upload className="w-4 h-4" />
+                              </button>
+
                               {/* Assign to plant */}
                               <button
                                 onClick={(e) => openAssignDialog(device, e)}
@@ -953,6 +1002,58 @@ export const Devices: React.FC = () => {
           onClose={() => { setQrDialogOpen(false); setQrDevice(null); }}
         />
       )}
+
+      {/* OTA Update Dialog */}
+      <Dialog open={otaDialogOpen} onOpenChange={(open) => { if (!open) { setOtaDialogOpen(false); setOtaDevice(null); } }}>
+        <DialogContent className="bg-iot-secondary border-iot-subtle max-w-md">
+          <DialogHeader>
+            <DialogTitle className="text-iot-primary">OTA Update</DialogTitle>
+            <DialogDescription className="text-iot-muted">
+              Push a firmware update to <span className="text-iot-cyan">{otaDevice?.name}</span>.
+              Current firmware: <span className="font-mono">{otaDevice?.firmwareVersion || 'N/A'}</span>
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-4">
+            <div>
+              <label className="block text-xs font-medium uppercase tracking-wider text-iot-secondary mb-2">
+                Select Firmware Version *
+              </label>
+              <Select value={otaSelectedFirmwareId} onValueChange={setOtaSelectedFirmwareId}>
+                <SelectTrigger className="input-dark w-full">
+                  <SelectValue placeholder="Choose firmware version" />
+                </SelectTrigger>
+                <SelectContent className="bg-iot-secondary border-iot-subtle">
+                  {otaFirmwareList.map(fw => (
+                    <SelectItem key={fw.firmwareId} value={String(fw.firmwareId)}>
+                      v{fw.version}{fw.isActive ? ' (Active)' : ''}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              {otaFirmwareList.length === 0 && (
+                <p className="text-xs text-iot-muted mt-1">No firmware versions available. Upload one first.</p>
+              )}
+            </div>
+            <DialogFooter className="gap-3">
+              <Button
+                variant="outline"
+                onClick={() => { setOtaDialogOpen(false); setOtaDevice(null); }}
+                className="border-iot-subtle text-iot-secondary"
+              >
+                Cancel
+              </Button>
+              <Button
+                onClick={handleOtaUpdate}
+                disabled={otaLoading || !otaSelectedFirmwareId}
+                className="gradient-primary text-iot-bg-primary"
+              >
+                {otaLoading ? 'Deploying...' : 'Deploy OTA'}
+              </Button>
+            </DialogFooter>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 };

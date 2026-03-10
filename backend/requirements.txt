@@ -14,3 +14,4 @@ aiomqtt>=2.0.0
 cryptography>=42.0.0
 pytest==8.3.0
 pytest-asyncio==0.24.0
+fastapi-limiter==0.1.6

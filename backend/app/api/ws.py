@@ -1,4 +1,4 @@
-from fastapi import APIRouter, WebSocket, WebSocketDisconnect, Query
+from fastapi import APIRouter, WebSocket, WebSocketDisconnect
 
 from app.utils.security import decode_token
 from app.services.ws_manager import ws_manager
@@ -7,14 +7,17 @@ router = APIRouter()
 
 
 @router.websocket("/ws")
-async def websocket_endpoint(websocket: WebSocket, token: str = Query(...)):
+async def websocket_endpoint(websocket: WebSocket):
     """WebSocket endpoint for real-time dashboard updates.
 
-    Authenticates the user via a JWT token passed as a query parameter.
+    Authenticates the user via a JWT token from cookies.
     Once connected, the user receives real-time sensor updates, alerts,
     and relay commands for all devices belonging to their owner.
     """
     try:
+        token = websocket.cookies.get("access_token")
+        if not token:
+            raise ValueError("No token")
         payload = decode_token(token)
         user_id = int(payload.get("sub"))
         owner_id = payload.get("owner_id")

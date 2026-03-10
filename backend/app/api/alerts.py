@@ -18,14 +18,23 @@ from app.api.deps import get_current_user, require_roles
 router = APIRouter()
 
 
-def _owner_filtered_alerts_query(owner_id: int):
-    """Base query for alerts filtered by owner via device->room->plant chain."""
+def _owner_filtered_alerts_query(current_user: User):
+    """Base query for alerts filtered by owner via device->room->plant chain and assigned plants."""
+    conditions = [Plant.owner_id == current_user.owner_id]
+    if current_user.role not in [UserRole.SUPER_ADMIN, UserRole.ADMIN]:
+        if not current_user.assigned_plants:
+            # If no assigned plants, ensure query returns nothing
+            conditions.append(False)
+        else:
+            assigned_ids = [int(pid) for pid in current_user.assigned_plants]
+            conditions.append(Plant.plant_id.in_(assigned_ids))
+
     return (
         select(Alert)
         .join(Device, Alert.device_id == Device.device_id)
         .join(Room, Alert.room_id == Room.room_id)
         .join(Plant, Room.plant_id == Plant.plant_id)
-        .where(Plant.owner_id == owner_id)
+        .where(*conditions)
     )
 
 
@@ -40,7 +49,7 @@ async def list_alerts(
 ):
     """List alerts filtered by owner via device->room->plant chain.
     Supports query params: severity, is_resolved, limit, offset."""
-    query = _owner_filtered_alerts_query(current_user.owner_id)
+    query = _owner_filtered_alerts_query(current_user)
     if severity is not None:
         query = query.where(Alert.severity == severity)
     if is_resolved is not None:
@@ -56,7 +65,7 @@ async def list_active_alerts(
     db: AsyncSession = Depends(get_db),
 ):
     """List unresolved alerts."""
-    query = _owner_filtered_alerts_query(current_user.owner_id).where(
+    query = _owner_filtered_alerts_query(current_user).where(
         Alert.is_resolved == False
     )
     query = query.order_by(Alert.created_at.desc())
@@ -71,7 +80,7 @@ async def get_alert(
     db: AsyncSession = Depends(get_db),
 ):
     """Get alert by ID."""
-    query = _owner_filtered_alerts_query(current_user.owner_id).where(
+    query = _owner_filtered_alerts_query(current_user).where(
         Alert.alert_id == alert_id
     )
     result = await db.execute(query)
@@ -97,7 +106,7 @@ async def acknowledge_alert(
     db: AsyncSession = Depends(get_db),
 ):
     """Acknowledge an alert. Set is_read=True, acknowledged_by, acknowledged_at. OPERATOR+ role."""
-    query = _owner_filtered_alerts_query(current_user.owner_id).where(
+    query = _owner_filtered_alerts_query(current_user).where(
         Alert.alert_id == alert_id
     )
     result = await db.execute(query)
@@ -125,7 +134,7 @@ async def resolve_alert(
     db: AsyncSession = Depends(get_db),
 ):
     """Resolve an alert. Set is_resolved=True, resolved_at=now. MANAGER+ role."""
-    query = _owner_filtered_alerts_query(current_user.owner_id).where(
+    query = _owner_filtered_alerts_query(current_user).where(
         Alert.alert_id == alert_id
     )
     result = await db.execute(query)

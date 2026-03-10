@@ -9,6 +9,7 @@ import {
   Bell,
   FileText,
   Users,
+  HardDrive,
   ChevronLeft,
   ChevronRight,
   LogOut,
@@ -34,6 +35,7 @@ const navItems: NavItem[] = [
   { id: 'alerts', label: 'Alerts', icon: Bell, path: '/alerts', badge: 0 },
   { id: 'reports', label: 'Reports', icon: FileText, path: '/reports' },
   { id: 'users', label: 'Users', icon: Users, path: '/users', adminOnly: true },
+  { id: 'firmware', label: 'Firmware', icon: HardDrive, path: '/firmware', adminOnly: true },
 ];
 
 export const Sidebar: React.FC = () => {

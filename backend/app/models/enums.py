@@ -104,3 +104,18 @@ class AuditAction(str, enum.Enum):
     LOGOUT = "LOGOUT"
     EXPORT = "EXPORT"
     CONFIG_CHANGE = "CONFIG_CHANGE"
+
+
+class HarvestGrade(str, enum.Enum):
+    A = "A"
+    B = "B"
+    C = "C"
+
+
+class GrowthStage(str, enum.Enum):
+    INOCULATION = "INOCULATION"
+    SPAWN_RUN = "SPAWN_RUN"
+    INCUBATION = "INCUBATION"
+    FRUITING = "FRUITING"
+    HARVEST = "HARVEST"
+    IDLE = "IDLE"

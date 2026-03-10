@@ -1,9 +1,10 @@
 import json
 from datetime import datetime
+from typing import List
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select
+from sqlalchemy import select, delete
 from redis.asyncio import Redis
 
 from app.database import get_db
@@ -11,12 +12,22 @@ from app.redis_client import get_redis
 from app.models.user import User
 from app.models.device import Device
 from app.models.relay_status import RelayStatus
+from app.models.relay_config import RelayConfig
+from app.models.relay_schedule import RelaySchedule
 from app.models.plant import Plant
 from app.models.room import Room
-from app.models.enums import RelayType, TriggerType
+from app.models.enums import RelayType, TriggerType, ThresholdParameter
 from app.schemas.relay import RelayCommand
+from app.schemas.relay_config import (
+    RelayConfigUpdate,
+    RelayConfigResponse,
+    RelayScheduleCreate,
+    RelayScheduleUpdate,
+    RelayScheduleResponse,
+)
 from app.api.deps import get_current_user
 from app.services.ws_manager import ws_manager
+from app.services.relay_automation import DEFAULT_PARAM_MAPPING
 
 router = APIRouter()
 
@@ -218,5 +229,387 @@ async def set_relay_command(
                     "timestamp": now.isoformat(),
                 },
             )
+
+    return {"status": "success"}
+
+
+# ─── Relay Config Endpoints ───────────────────────────────────────────────────
+
+
+@router.get("/relay-config/{device_id}")
+async def get_relay_configs(
+    device_id: int,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Get relay automation configs for a device.
+
+    Returns all 7 relay types -- defaults to MANUAL if no config row exists.
+    """
+    await _verify_device_ownership(db, device_id, current_user.owner_id)
+
+    result = await db.execute(
+        select(RelayConfig).where(RelayConfig.device_id == device_id)
+    )
+    existing = {cfg.relay_type.value: cfg for cfg in result.scalars().all()}
+
+    configs = []
+    for rt in RelayType:
+        if rt.value in existing:
+            cfg = existing[rt.value]
+            configs.append(
+                RelayConfigResponse(
+                    relay_type=cfg.relay_type.value,
+                    mode=cfg.mode.value,
+                    threshold_param=cfg.threshold_param.value if cfg.threshold_param else None,
+                    action_on_high=cfg.action_on_high,
+                    action_on_low=cfg.action_on_low,
+                )
+            )
+        else:
+            # Default: MANUAL, with default param mapping
+            default_param = DEFAULT_PARAM_MAPPING.get(rt.value)
+            configs.append(
+                RelayConfigResponse(
+                    relay_type=rt.value,
+                    mode=TriggerType.MANUAL.value,
+                    threshold_param=default_param.value if default_param else None,
+                    action_on_high="ON",
+                    action_on_low="OFF",
+                )
+            )
+
+    return {"configs": [c.model_dump() for c in configs]}
+
+
+@router.put("/relay-config/{device_id}")
+async def update_relay_configs(
+    device_id: int,
+    configs: List[RelayConfigUpdate],
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Upsert relay automation configs for a device."""
+    await _verify_device_ownership(db, device_id, current_user.owner_id)
+
+    now = datetime.utcnow()
+    updated = []
+
+    for cfg_in in configs:
+        # Validate relay_type
+        try:
+            relay_type = RelayType(cfg_in.relay_type.upper())
+        except ValueError:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"Invalid relay_type: {cfg_in.relay_type}",
+            )
+
+        # Validate mode
+        try:
+            mode = TriggerType(cfg_in.mode.upper())
+        except ValueError:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"Invalid mode: {cfg_in.mode}",
+            )
+
+        # Validate threshold_param
+        threshold_param = None
+        if cfg_in.threshold_param:
+            try:
+                threshold_param = ThresholdParameter(cfg_in.threshold_param.upper())
+            except ValueError:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail=f"Invalid threshold_param: {cfg_in.threshold_param}",
+                )
+
+        # Upsert
+        result = await db.execute(
+            select(RelayConfig).where(
+                RelayConfig.device_id == device_id,
+                RelayConfig.relay_type == relay_type,
+            )
+        )
+        existing = result.scalar_one_or_none()
+
+        if existing:
+            existing.mode = mode
+            existing.threshold_param = threshold_param
+            existing.action_on_high = cfg_in.action_on_high.upper()
+            existing.action_on_low = cfg_in.action_on_low.upper()
+            existing.updated_by = current_user.user_id
+            existing.updated_at = now
+        else:
+            new_cfg = RelayConfig(
+                device_id=device_id,
+                relay_type=relay_type,
+                mode=mode,
+                threshold_param=threshold_param,
+                action_on_high=cfg_in.action_on_high.upper(),
+                action_on_low=cfg_in.action_on_low.upper(),
+                updated_by=current_user.user_id,
+                updated_at=now,
+            )
+            db.add(new_cfg)
+
+        updated.append(cfg_in.relay_type.upper())
+
+    await db.commit()
+    return {"status": "success", "updated": updated}
+
+
+@router.post("/relay-config/{device_id}/all-auto")
+async def set_all_relays_auto(
+    device_id: int,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Set all relays to AUTO mode with default parameter mappings."""
+    await _verify_device_ownership(db, device_id, current_user.owner_id)
+
+    now = datetime.utcnow()
+
+    for rt in RelayType:
+        default_param = DEFAULT_PARAM_MAPPING.get(rt.value)
+        # EXTRA has no auto param, keep it MANUAL
+        mode = TriggerType.AUTO if default_param else TriggerType.MANUAL
+
+        result = await db.execute(
+            select(RelayConfig).where(
+                RelayConfig.device_id == device_id,
+                RelayConfig.relay_type == rt,
+            )
+        )
+        existing = result.scalar_one_or_none()
+
+        if existing:
+            existing.mode = mode
+            existing.threshold_param = default_param
+            existing.action_on_high = "ON"
+            existing.action_on_low = "OFF"
+            existing.updated_by = current_user.user_id
+            existing.updated_at = now
+        else:
+            db.add(
+                RelayConfig(
+                    device_id=device_id,
+                    relay_type=rt,
+                    mode=mode,
+                    threshold_param=default_param,
+                    action_on_high="ON",
+                    action_on_low="OFF",
+                    updated_by=current_user.user_id,
+                    updated_at=now,
+                )
+            )
+
+    await db.commit()
+    return {"status": "success", "mode": "AUTO"}
+
+
+@router.post("/relay-config/{device_id}/all-manual")
+async def set_all_relays_manual(
+    device_id: int,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Set all relays to MANUAL mode."""
+    await _verify_device_ownership(db, device_id, current_user.owner_id)
+
+    now = datetime.utcnow()
+
+    for rt in RelayType:
+        result = await db.execute(
+            select(RelayConfig).where(
+                RelayConfig.device_id == device_id,
+                RelayConfig.relay_type == rt,
+            )
+        )
+        existing = result.scalar_one_or_none()
+
+        if existing:
+            existing.mode = TriggerType.MANUAL
+            existing.updated_by = current_user.user_id
+            existing.updated_at = now
+        else:
+            default_param = DEFAULT_PARAM_MAPPING.get(rt.value)
+            db.add(
+                RelayConfig(
+                    device_id=device_id,
+                    relay_type=rt,
+                    mode=TriggerType.MANUAL,
+                    threshold_param=default_param,
+                    action_on_high="ON",
+                    action_on_low="OFF",
+                    updated_by=current_user.user_id,
+                    updated_at=now,
+                )
+            )
+
+    await db.commit()
+    return {"status": "success", "mode": "MANUAL"}
+
+
+# ─── Relay Schedule Endpoints ─────────────────────────────────────────────────
+
+
+@router.get("/relay-schedule/{device_id}")
+async def get_relay_schedules(
+    device_id: int,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """List all relay schedules for a device."""
+    await _verify_device_ownership(db, device_id, current_user.owner_id)
+
+    result = await db.execute(
+        select(RelaySchedule).where(RelaySchedule.device_id == device_id)
+    )
+    schedules = result.scalars().all()
+
+    return {
+        "schedules": [
+            RelayScheduleResponse(
+                schedule_id=s.schedule_id,
+                relay_type=s.relay_type.value,
+                days_of_week=s.days_of_week,
+                time_on=s.time_on,
+                time_off=s.time_off,
+                is_active=s.is_active,
+            ).model_dump()
+            for s in schedules
+        ]
+    }
+
+
+@router.post("/relay-schedule/{device_id}")
+async def create_relay_schedule(
+    device_id: int,
+    schedule_in: RelayScheduleCreate,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Create a new relay schedule for a device."""
+    await _verify_device_ownership(db, device_id, current_user.owner_id)
+
+    # Validate relay_type
+    try:
+        relay_type = RelayType(schedule_in.relay_type.upper())
+    except ValueError:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Invalid relay_type: {schedule_in.relay_type}",
+        )
+
+    # Validate time format
+    for time_str in [schedule_in.time_on, schedule_in.time_off]:
+        parts = time_str.split(":")
+        if len(parts) != 2 or not parts[0].isdigit() or not parts[1].isdigit():
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"Invalid time format: {time_str}. Use HH:MM",
+            )
+        if int(parts[0]) > 23 or int(parts[1]) > 59:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"Invalid time value: {time_str}",
+            )
+
+    schedule = RelaySchedule(
+        device_id=device_id,
+        relay_type=relay_type,
+        days_of_week=schedule_in.days_of_week,
+        time_on=schedule_in.time_on,
+        time_off=schedule_in.time_off,
+        is_active=True,
+        created_by=current_user.user_id,
+    )
+    db.add(schedule)
+    await db.commit()
+    await db.refresh(schedule)
+
+    return {
+        "status": "success",
+        "schedule": RelayScheduleResponse(
+            schedule_id=schedule.schedule_id,
+            relay_type=schedule.relay_type.value,
+            days_of_week=schedule.days_of_week,
+            time_on=schedule.time_on,
+            time_off=schedule.time_off,
+            is_active=schedule.is_active,
+        ).model_dump(),
+    }
+
+
+@router.put("/relay-schedule/{schedule_id}")
+async def update_relay_schedule(
+    schedule_id: int,
+    schedule_in: RelayScheduleUpdate,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Update an existing relay schedule."""
+    result = await db.execute(
+        select(RelaySchedule).where(RelaySchedule.schedule_id == schedule_id)
+    )
+    schedule = result.scalar_one_or_none()
+    if not schedule:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Schedule not found"
+        )
+
+    # Verify ownership
+    await _verify_device_ownership(db, schedule.device_id, current_user.owner_id)
+
+    if schedule_in.days_of_week is not None:
+        schedule.days_of_week = schedule_in.days_of_week
+    if schedule_in.time_on is not None:
+        schedule.time_on = schedule_in.time_on
+    if schedule_in.time_off is not None:
+        schedule.time_off = schedule_in.time_off
+    if schedule_in.is_active is not None:
+        schedule.is_active = schedule_in.is_active
+
+    await db.commit()
+    await db.refresh(schedule)
+
+    return {
+        "status": "success",
+        "schedule": RelayScheduleResponse(
+            schedule_id=schedule.schedule_id,
+            relay_type=schedule.relay_type.value,
+            days_of_week=schedule.days_of_week,
+            time_on=schedule.time_on,
+            time_off=schedule.time_off,
+            is_active=schedule.is_active,
+        ).model_dump(),
+    }
+
+
+@router.delete("/relay-schedule/{schedule_id}")
+async def delete_relay_schedule(
+    schedule_id: int,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Delete a relay schedule."""
+    result = await db.execute(
+        select(RelaySchedule).where(RelaySchedule.schedule_id == schedule_id)
+    )
+    schedule = result.scalar_one_or_none()
+    if not schedule:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Schedule not found"
+        )
+
+    # Verify ownership
+    await _verify_device_ownership(db, schedule.device_id, current_user.owner_id)
+
+    await db.execute(
+        delete(RelaySchedule).where(RelaySchedule.schedule_id == schedule_id)
+    )
+    await db.commit()
 
     return {"status": "success"}

@@ -34,17 +34,25 @@ async def get_dashboard_summary(
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
-    """Return dashboard summary counts filtered by the current user's owner_id.
-
-    Includes counts of plants, rooms, devices (total + online),
-    active alerts, and critical alerts.
-    """
+    """Return dashboard summary counts filtered by the current user's owner_id and assigned plants."""
     owner_id = current_user.owner_id
+    
+    plant_condition = Plant.owner_id == owner_id
+    is_admin = current_user.role in [UserRole.SUPER_ADMIN, UserRole.ADMIN]
+    if not is_admin:
+        if not current_user.assigned_plants:
+            # If no assigned plants and not an admin, everything is 0
+            return DashboardSummary(
+                total_plants=0, total_rooms=0, total_devices=0,
+                active_devices=0, active_alerts=0, critical_alerts=0
+            )
+        assigned_ids = [int(pid) for pid in current_user.assigned_plants]
+        plant_condition = Plant.plant_id.in_(assigned_ids)
 
     # Count plants
     plants_result = await db.execute(
         select(func.count(Plant.plant_id)).where(
-            Plant.owner_id == owner_id, Plant.is_active == True
+            plant_condition, Plant.is_active == True
         )
     )
     total_plants = plants_result.scalar() or 0
@@ -53,7 +61,7 @@ async def get_dashboard_summary(
     rooms_result = await db.execute(
         select(func.count(Room.room_id))
         .join(Plant, Plant.plant_id == Room.plant_id)
-        .where(Plant.owner_id == owner_id, Room.is_active == True)
+        .where(plant_condition, Room.is_active == True)
     )
     total_rooms = rooms_result.scalar() or 0
 
@@ -62,7 +70,7 @@ async def get_dashboard_summary(
         select(func.count(Device.device_id))
         .join(Room, Room.room_id == Device.room_id)
         .join(Plant, Plant.plant_id == Room.plant_id)
-        .where(Plant.owner_id == owner_id, Device.is_active == True)
+        .where(plant_condition, Device.is_active == True)
     )
     total_devices = devices_result.scalar() or 0
 
@@ -71,7 +79,7 @@ async def get_dashboard_summary(
         .join(Room, Room.room_id == Device.room_id)
         .join(Plant, Plant.plant_id == Room.plant_id)
         .where(
-            Plant.owner_id == owner_id,
+            plant_condition,
             Device.is_active == True,
             Device.is_online == True,
         )
@@ -84,7 +92,7 @@ async def get_dashboard_summary(
         .join(Device, Device.device_id == Alert.device_id)
         .join(Room, Room.room_id == Device.room_id)
         .join(Plant, Plant.plant_id == Room.plant_id)
-        .where(Plant.owner_id == owner_id, Alert.is_resolved == False)
+        .where(plant_condition, Alert.is_resolved == False)
     )
     active_alerts = active_alerts_result.scalar() or 0
 
@@ -95,7 +103,7 @@ async def get_dashboard_summary(
         .join(Room, Room.room_id == Device.room_id)
         .join(Plant, Plant.plant_id == Room.plant_id)
         .where(
-            Plant.owner_id == owner_id,
+            plant_condition,
             Alert.is_resolved == False,
             Alert.severity == Severity.CRITICAL,
         )
@@ -121,12 +129,20 @@ async def get_current_readings(
     """Return all live readings for the current owner's devices from Redis."""
     owner_id = current_user.owner_id
 
-    # Get all device IDs for this owner
+    plant_condition = Plant.owner_id == owner_id
+    is_admin = current_user.role in [UserRole.SUPER_ADMIN, UserRole.ADMIN]
+    if not is_admin:
+        if not current_user.assigned_plants:
+            return {"readings": []}
+        assigned_ids = [int(pid) for pid in current_user.assigned_plants]
+        plant_condition = Plant.plant_id.in_(assigned_ids)
+
+    # Get all device IDs for this owner/assigned plants
     result = await db.execute(
         select(Device.device_id)
         .join(Room, Room.room_id == Device.room_id)
         .join(Plant, Plant.plant_id == Room.plant_id)
-        .where(Plant.owner_id == owner_id, Device.is_active == True)
+        .where(plant_condition, Device.is_active == True)
     )
     device_ids = [row[0] for row in result.all()]
 

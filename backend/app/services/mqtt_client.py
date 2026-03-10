@@ -18,6 +18,12 @@ class MQTTManager:
     async def start(self):
         """Start MQTT client -- subscribe to device topics."""
         self._running = True
+
+        tls_context = None
+        if getattr(settings, "MQTT_USE_TLS", False):
+            import ssl
+            tls_context = ssl.create_default_context(cafile=settings.MQTT_CA_CERTS)
+
         while self._running:
             try:
                 async with aiomqtt.Client(
@@ -25,6 +31,7 @@ class MQTTManager:
                     port=settings.MQTT_BROKER_PORT,
                     username=settings.MQTT_USERNAME,
                     password=settings.MQTT_PASSWORD,
+                    tls_context=tls_context,
                 ) as client:
                     self._client = client
                     logger.info(
@@ -177,6 +184,27 @@ class MQTTManager:
                 {"relay_type": relay_type, "state": state}
             )
             await self._client.publish(topic, payload)
+
+    async def publish_config_update(
+        self, license_key: str, thresholds: dict
+    ):
+        """Publish threshold config update to a device via MQTT.
+
+        The firmware subscribes to device/{licenseKey}/config and updates
+        EEPROM values (co2_min, temp_min, humidity_min, etc.) in real time.
+        """
+        if self._client:
+            topic = f"device/{license_key}/config"
+            payload = json.dumps(thresholds)
+            await self._client.publish(topic, payload)
+            logger.info(
+                "Published config update to %s: %s", topic, thresholds
+            )
+        else:
+            logger.warning(
+                "MQTT not connected -- cannot publish config to %s",
+                license_key,
+            )
 
     async def publish_broadcast_control(self, action: str):
         """Broadcast control to ALL devices."""

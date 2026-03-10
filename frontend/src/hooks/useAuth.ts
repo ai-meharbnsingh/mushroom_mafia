@@ -47,8 +47,6 @@ export function useAuth() {
   }, [dispatchLogout]);
 
   const checkAuth = useCallback(async (): Promise<boolean> => {
-    const token = localStorage.getItem('access_token');
-    if (!token) return false;
     try {
       const userData = await authService.getMe();
       const user: User = {
@@ -58,8 +56,6 @@ export function useAuth() {
       login(user);
       return true;
     } catch {
-      localStorage.removeItem('access_token');
-      localStorage.removeItem('refresh_token');
       return false;
     }
   }, [login]);

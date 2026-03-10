@@ -6,6 +6,7 @@ from redis.asyncio import Redis
 
 from app.models import RoomReading, Device, Threshold, Alert, RelayStatus, Room, Plant
 from app.models.enums import AlertType, Severity, ThresholdParameter, RelayType, TriggerType
+from app.services.relay_automation import evaluate_auto_relays
 
 
 async def process_reading(
@@ -81,6 +82,25 @@ async def process_reading(
     # 5. Check thresholds and create alerts
     if device.room_id:
         await check_thresholds(db, redis, device, data, now, ws_manager)
+
+    # 5b. Evaluate relay automation (AUTO mode relays)
+    if device.room_id:
+        try:
+            from app.services.mqtt_client import mqtt_manager
+
+            await evaluate_auto_relays(
+                db=db,
+                redis=redis,
+                device=device,
+                reading_data=data,
+                mqtt_manager=mqtt_manager,
+                ws_manager=ws_manager,
+            )
+        except Exception:
+            import logging
+            logging.getLogger(__name__).error(
+                "Error evaluating auto relays for device %d", device.device_id, exc_info=True
+            )
 
     # 6. Push via WebSocket
     if ws_manager and device.room_id:

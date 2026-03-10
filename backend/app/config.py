@@ -15,6 +15,8 @@ class Settings(BaseSettings):
     MQTT_BROKER_PORT: int = 1883
     MQTT_USERNAME: str = "backend_service"
     MQTT_PASSWORD: str = "backend_mqtt_secret"
+    MQTT_USE_TLS: bool = False
+    MQTT_CA_CERTS: str = "../certs/ca.crt"
     EMQX_API_URL: str = "http://localhost:18083"
 
     # Device password encryption (Fernet key)

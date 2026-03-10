@@ -1,7 +1,10 @@
-from fastapi import APIRouter, Depends, HTTPException, status
+import secrets
+from fastapi import APIRouter, Depends, HTTPException, status, Response, Request
+from fastapi_limiter.depends import RateLimiter
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 
+from app.config import settings
 from app.database import get_db
 from app.schemas.auth import (
     LoginRequest,
@@ -18,8 +21,8 @@ from app.utils.security import decode_token, hash_password, verify_password
 router = APIRouter()
 
 
-@router.post("/login", response_model=TokenResponse)
-async def login(request: LoginRequest, db: AsyncSession = Depends(get_db)):
+@router.post("/login", response_model=TokenResponse, dependencies=[Depends(RateLimiter(times=30, seconds=60))])
+async def login(request: LoginRequest, response: Response, db: AsyncSession = Depends(get_db)):
     """Authenticate user and return access + refresh tokens."""
     user = await authenticate_user(db, request.username, request.password)
     if not user:
@@ -29,6 +32,8 @@ async def login(request: LoginRequest, db: AsyncSession = Depends(get_db)):
         )
 
     tokens = create_tokens(user)
+    response.set_cookie(key="access_token", value=tokens["access_token"], httponly=True, samesite="lax", secure=False, max_age=settings.ACCESS_TOKEN_EXPIRE_MINUTES * 60)
+    response.set_cookie(key="refresh_token", value=tokens["refresh_token"], httponly=True, samesite="lax", secure=False, max_age=settings.REFRESH_TOKEN_EXPIRE_DAYS * 24 * 60 * 60)
     return TokenResponse(
         access_token=tokens["access_token"],
         refresh_token=tokens["refresh_token"],
@@ -37,16 +42,24 @@ async def login(request: LoginRequest, db: AsyncSession = Depends(get_db)):
 
 
 @router.post("/logout")
-async def logout(current_user: User = Depends(get_current_user)):
+async def logout(response: Response, current_user: User = Depends(get_current_user)):
     """Logout current user (stateless acknowledgement)."""
+    response.delete_cookie("access_token")
+    response.delete_cookie("refresh_token")
+    response.delete_cookie("csrf_token")
     return {"detail": "Successfully logged out"}
 
 
 @router.post("/refresh", response_model=TokenResponse)
-async def refresh_token(request: RefreshRequest, db: AsyncSession = Depends(get_db)):
+async def refresh_token(request: Request, response: Response, body: RefreshRequest = None, db: AsyncSession = Depends(get_db)):
     """Validate refresh token and issue a new access token."""
+    refresh_token = request.cookies.get("refresh_token")
+    if not refresh_token and body:
+        refresh_token = body.refresh_token
+    if not refresh_token:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Missing refresh token")
     try:
-        payload = decode_token(request.refresh_token)
+        payload = decode_token(refresh_token)
     except Exception:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
@@ -77,6 +90,10 @@ async def refresh_token(request: RefreshRequest, db: AsyncSession = Depends(get_
         )
 
     tokens = create_tokens(user)
+    csrf_token = secrets.token_urlsafe(32)
+    response.set_cookie(key="access_token", value=tokens["access_token"], httponly=True, samesite="lax", secure=False, max_age=settings.ACCESS_TOKEN_EXPIRE_MINUTES * 60)
+    response.set_cookie(key="refresh_token", value=tokens["refresh_token"], httponly=True, samesite="lax", secure=False, max_age=settings.REFRESH_TOKEN_EXPIRE_DAYS * 24 * 60 * 60)
+    response.set_cookie(key="csrf_token", value=csrf_token, httponly=False, samesite="lax", secure=False, max_age=settings.ACCESS_TOKEN_EXPIRE_MINUTES * 60)
     return TokenResponse(
         access_token=tokens["access_token"],
         refresh_token=tokens["refresh_token"],
