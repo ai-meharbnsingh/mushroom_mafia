@@ -7,13 +7,19 @@
 /*
  * Function: void changeWifi()
  * ------------------------
- * Resets the WiFi settings and initiates a WiFi connection.
- * Restarts the ESP8266 after resetting the settings.
+ * Clears stored WiFi credentials from EEPROM and reboots.
+ * Device will boot into captive portal AP mode for re-configuration.
  */
 void changeWifi() {
-  WiFi.disconnect(true, true);  // disconnect and erase saved credentials
-  delay(1000);
-  ESP.restart();
+  clearWiFiCredentials();  // Clear EEPROM WiFi slots
+  Serial.println("WiFi credentials cleared. Rebooting into AP mode...");
+  WiFi.disconnect(true, true);  // disconnect and erase ESP32 saved credentials
+  lcd.clear();
+  lcd.print("WiFi Cleared");
+  lcd.setCursor(0, 1);
+  lcd.print("Rebooting to AP...");
+  delay(2000);
+  ESP.restart();  // Will boot into captive portal
 }
 
 /*

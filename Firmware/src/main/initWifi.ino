@@ -83,10 +83,10 @@ void setupServer() {
   Serial.println("HTTP server started");
 }
 
-void initWiFi() {
-  const char* ssid = "Jas_Mehar";
-  const char* pass = "airtel2730";
-
+// Connect to WiFi with 3 retries, 30 seconds each.
+// Returns true on success. On total failure: clears WiFi credentials
+// and reboots into captive portal for re-configuration.
+bool connectToWiFi(const char* ssid, const char* pass) {
   for (int retry = 1; retry <= 3; retry++) {
     lcd.clear();
     lcd.setCursor(0, 0);
@@ -123,19 +123,48 @@ void initWiFi() {
       Serial.println(WiFi.localIP());
       setupServer();
       delay(2000);
-      return; // Success!
+      return true;
     }
-    
+
     Serial.println("\nAttempt failed, cooling down...");
     delay(2000);
   }
 
-  // If all 3 retries fail
-  Serial.println("\nAll WiFi attempts failed.");
+  // All 3 retries failed — clear stored credentials and reboot into AP mode
+  Serial.println("\nAll WiFi attempts failed. Clearing credentials for portal re-config.");
   lcd.clear();
   lcd.print("WiFi FAILED");
   lcd.setCursor(0, 1);
-  lcd.print("Check Router");
-  delay(5000);
+  lcd.print("Clearing creds...");
+  clearWiFiCredentials();
+  delay(3000);
   ESP.restart();
+  return false;  // unreachable — ESP restarts above
+}
+
+void initWiFi() {
+  char ssid[33] = {0};
+  char pass[65] = {0};
+
+  if (readWiFiCredentials(ssid, pass)) {
+    // WiFi credentials found in EEPROM -- connect in STA mode
+    Serial.printf("WiFi from EEPROM: SSID=%s\n", ssid);
+    connectToWiFi(ssid, pass);
+  } else {
+    // No WiFi credentials -- start captive portal
+    Serial.println("No WiFi credentials -- starting captive portal");
+    lcd.clear();
+    lcd.print("WiFi Setup Mode");
+    lcd.setCursor(0, 1);
+    lcd.print("Connect to AP:");
+
+    // Build AP name from MAC for LCD display
+    String apName = "MUSHROOM_" + WiFi.macAddress().substring(WiFi.macAddress().length() - 5);
+    apName.replace(":", "");
+    lcd.setCursor(0, 2);
+    lcd.print(apName);
+
+    startCaptivePortal();
+    // Portal blocks until user submits credentials and device reboots
+  }
 }

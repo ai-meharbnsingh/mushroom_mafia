@@ -25,9 +25,15 @@ void setup() {
         nvs_flash_erase();
         nvs_flash_init();
     }
-    // Set up the WiFi connection
+    // Initialize EEPROM FIRST — WiFi credentials are stored there
+    // (must happen before initWiFi so we can read SSID/password or start portal)
+    eepromInit();
+
+    // Set up the WiFi connection (reads credentials from EEPROM or starts captive portal)
     initWiFi();
-    // Initialize the connected devices (sensors, relays, EEPROM, auth)
+
+    // Initialize the connected devices (sensors, relays, auth)
+    // Note: eepromInit() already called above, initializeDevices() will skip it
     initializeDevices();
 
     // Two-stage boot: if MQTT provisioned, set up MQTT connection

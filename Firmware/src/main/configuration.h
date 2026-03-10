@@ -16,6 +16,7 @@
 #include <AsyncElegantOTA.h>
 #include <ArduinoJson.h>
 #include <PubSubClient.h>                // MQTT client — install via Arduino Library Manager: "PubSubClient by Nick O'Leary"
+#include <DNSServer.h>                   // DNS server for captive portal redirect
 
 int row = 0;
 int column = 0;
@@ -84,6 +85,7 @@ const char* mqttBrokerHost = "192.168.29.236";  // Mac LAN IP — change to prod
 int mqttBrokerPort = 1883;
 char devicePassword[65];   // MQTT password received from server during provisioning
 bool mqttProvisioned = false;  // false = HTTP bootstrap mode, true = MQTT runtime mode
+bool portalActive = false;     // true when captive portal is running
 bool deviceDisabled = false;   // Kill-switch state (set via MQTT control topic)
 char mqttHost[65];             // MQTT broker host from provisioning (overrides mqttBrokerHost)
 
@@ -120,6 +122,9 @@ const char* provisionEndpoint = "/device/provision/";  // + license_key
 // 172     1   Humidifier relay status (bool)
 // 173     1   Duct fan relay status (bool)
 // 174     1   Extra relay status (bool)
+// 175     1   WiFi provisioned flag (0=not provisioned, 1=provisioned, 255=uninitialized)
+// 176    33   WiFi SSID (1 byte length + up to 32 chars)
+// 209    65   WiFi Password (1 byte length + up to 64 chars)
 // ─────────────────────────────────────────────────────────────────
 
 #define ADDR_CO2_RELAY_STATUS 0
@@ -140,6 +145,11 @@ const char* provisionEndpoint = "/device/provision/";  // + license_key
 #define ADDR_HUM2_RELAY_STATUS 172
 #define ADDR_DUCT_RELAY_STATUS 173
 #define ADDR_EXTRA_RELAY_STATUS 174
+
+// WiFi credentials in EEPROM (captive portal provisioning)
+#define ADDR_WIFI_PROVISIONED 175  // 1 byte: 0=not provisioned, 1=provisioned, 255=uninitialized
+#define ADDR_WIFI_SSID 176         // 1 byte length + up to 32 chars
+#define ADDR_WIFI_PASSWORD 209     // 1 byte length + up to 64 chars
 
 #define EEPROM_MEMORY_SIZE 512
 

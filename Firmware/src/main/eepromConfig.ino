@@ -75,6 +75,15 @@ void readFromEeprom() {
     Serial.println("Legacy device key loaded (HTTP-only mode)");
   }
 
+  // Legacy WiFi migration: if device has a license key but WiFi flag is
+  // uninitialized (255), write the hardcoded Jas_Mehar credentials to EEPROM.
+  // This keeps existing 3 devices working without needing the captive portal.
+  uint8_t wifiFlag = EEPROM.read(ADDR_WIFI_PROVISIONED);
+  if (wifiFlag == 255 && strlen(licenseKey) > 4) {
+    Serial.println("Legacy migration: writing hardcoded WiFi to EEPROM");
+    saveWiFiCredentials("Jas_Mehar", "airtel2730");
+  }
+
   EEPROM.get(ADDR_CO2_RELAY_STATUS, _co2RelayStatus);
   EEPROM.get(ADDR_HUM_RELAY_STATUS, _humidityRelayStatus);
   EEPROM.get(ADDR_AC_RELAY_STATUS, _ACRelayStatus);
@@ -120,6 +129,58 @@ void readFromEeprom() {
   // Read MQTT provisioning data
   readMQTTCredentials();
 }
+
+// ─── WiFi Credential Functions (Captive Portal) ───────────────────────
+
+void saveWiFiCredentials(const char* ssid, const char* password) {
+    // Write SSID: length byte at ADDR_WIFI_SSID, then chars
+    uint8_t ssidLen = strlen(ssid);
+    if (ssidLen > 32) ssidLen = 32;
+    EEPROM.write(ADDR_WIFI_SSID, ssidLen);
+    for (uint8_t i = 0; i < ssidLen; i++) {
+        EEPROM.write(ADDR_WIFI_SSID + 1 + i, ssid[i]);
+    }
+    // Write Password: length byte at ADDR_WIFI_PASSWORD, then chars
+    uint8_t passLen = strlen(password);
+    if (passLen > 64) passLen = 64;
+    EEPROM.write(ADDR_WIFI_PASSWORD, passLen);
+    for (uint8_t i = 0; i < passLen; i++) {
+        EEPROM.write(ADDR_WIFI_PASSWORD + 1 + i, password[i]);
+    }
+    // Set provisioned flag
+    EEPROM.write(ADDR_WIFI_PROVISIONED, 1);
+    EEPROM.commit();
+    Serial.println("WiFi credentials saved to EEPROM");
+}
+
+bool readWiFiCredentials(char* ssid, char* password) {
+    uint8_t flag = EEPROM.read(ADDR_WIFI_PROVISIONED);
+    if (flag != 1) return false;  // Not provisioned (0 or 255)
+
+    uint8_t ssidLen = EEPROM.read(ADDR_WIFI_SSID);
+    if (ssidLen == 0 || ssidLen > 32 || ssidLen == 255) return false;
+    for (uint8_t i = 0; i < ssidLen; i++) {
+        ssid[i] = EEPROM.read(ADDR_WIFI_SSID + 1 + i);
+    }
+    ssid[ssidLen] = '\0';
+
+    uint8_t passLen = EEPROM.read(ADDR_WIFI_PASSWORD);
+    if (passLen > 64 || passLen == 255) passLen = 0;
+    for (uint8_t i = 0; i < passLen; i++) {
+        password[i] = EEPROM.read(ADDR_WIFI_PASSWORD + 1 + i);
+    }
+    password[passLen] = '\0';
+
+    return true;
+}
+
+void clearWiFiCredentials() {
+    EEPROM.write(ADDR_WIFI_PROVISIONED, 0);
+    EEPROM.commit();
+    Serial.println("WiFi credentials cleared from EEPROM");
+}
+
+// ─── MQTT Credential Functions ────────────────────────────────────────
 
 void saveMQTTCredentials(const char* password, const char* host, int port) {
   // Save MQTT credentials to EEPROM after provisioning.
@@ -204,8 +265,13 @@ void readMQTTCredentials() {
   }
 }
 
+bool eepromInitialized = false;
+
 void eepromInit() {
   // Initializes the EEPROM and reads the stored values from it.
+  // Guard against double-init (called from setup() before initWiFi, and from initializeDevices)
+  if (eepromInitialized) return;
+  eepromInitialized = true;
   Serial.println("start...");
   EEPROM.begin(EEPROM_MEMORY_SIZE);  // ESP32 Arduino core 3.x: begin() returns void
   readFromEeprom();
