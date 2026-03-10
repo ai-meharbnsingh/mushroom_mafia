@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { gsap } from 'gsap';
-import { Search, Filter, ChevronRight, Cpu, Plus, Copy, Check, ShieldAlert, ShieldOff, Ban } from 'lucide-react';
+import { Search, Filter, ChevronRight, Cpu, Plus, Copy, Check, ShieldAlert, ShieldOff, Ban, QrCode, CheckCircle, XCircle, Clock } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import {
@@ -30,18 +30,20 @@ import {
 } from '@/components/ui/alert-dialog';
 import { StatusBadge } from '@/components/ui-custom/StatusBadge';
 import { EmptyState } from '@/components/ui-custom/EmptyState';
+import { ViewQrDialog } from '@/components/ui-custom/ViewQrDialog';
 import { useApp } from '@/store/AppContext';
 import { useAuth } from '@/hooks/useAuth';
 import { useToast } from '@/hooks/useToast';
 import { deviceService } from '@/services/deviceService';
-import { mapDevice } from '@/utils/mappers';
-import type { Device, SubscriptionStatus } from '@/types';
+import { mapDevice, mapPendingDevice } from '@/utils/mappers';
+import type { Device, SubscriptionStatus, PendingDevice } from '@/types';
 
 
 // Subscription status badge component
 const SubscriptionBadge: React.FC<{ status: SubscriptionStatus }> = ({ status }) => {
   const config: Record<SubscriptionStatus, { bg: string; color: string; label: string }> = {
     PENDING: { bg: 'rgba(255, 209, 102, 0.15)', color: '#FFD166', label: 'Pending' },
+    PENDING_APPROVAL: { bg: 'rgba(255, 165, 0, 0.15)', color: '#FFA500', label: 'Pending Approval' },
     ACTIVE: { bg: 'rgba(39, 251, 107, 0.15)', color: '#27FB6B', label: 'Active' },
     SUSPENDED: { bg: 'rgba(255, 45, 85, 0.15)', color: '#FF2D55', label: 'Suspended' },
     EXPIRED: { bg: 'rgba(109, 116, 132, 0.15)', color: '#6D7484', label: 'Expired' },
@@ -138,6 +140,14 @@ export const Devices: React.FC = () => {
   const [revokeDevice, setRevokeDevice] = useState<Device | null>(null);
   const [revokeLoading, setRevokeLoading] = useState(false);
 
+  // Pending approval state
+  const [pendingDevices, setPendingDevices] = useState<PendingDevice[]>([]);
+  const [approvalLoading, setApprovalLoading] = useState<Record<string, boolean>>({});
+
+  // View QR dialog state
+  const [qrDialogOpen, setQrDialogOpen] = useState(false);
+  const [qrDevice, setQrDevice] = useState<{ id: string; name: string } | null>(null);
+
   useEffect(() => {
     if (tableRef.current) {
       gsap.fromTo(
@@ -147,6 +157,45 @@ export const Devices: React.FC = () => {
       );
     }
   }, []);
+
+  // Fetch pending approval devices for admins
+  useEffect(() => {
+    if (!isAdmin) return;
+    fetchPendingDevices();
+  }, [isAdmin]);
+
+  const fetchPendingDevices = async () => {
+    try {
+      const data = await deviceService.getPendingApproval();
+      const mapped = Array.isArray(data) ? data.map(mapPendingDevice) : [];
+      setPendingDevices(mapped);
+    } catch {
+      // Silently fail - endpoint may not exist yet
+      setPendingDevices([]);
+    }
+  };
+
+  const handleApproveReject = async (deviceId: string, action: 'APPROVE' | 'REJECT') => {
+    setApprovalLoading(prev => ({ ...prev, [deviceId]: true }));
+    try {
+      await deviceService.approveDevice(deviceId, action);
+      toast.success(action === 'APPROVE' ? 'Device approved' : 'Device rejected');
+      setPendingDevices(prev => prev.filter(d => d.deviceId !== deviceId));
+      // Refresh device list
+      const allDevices = await deviceService.getAll();
+      dispatch({ type: 'SET_DEVICES', payload: Array.isArray(allDevices) ? allDevices.map((d: any) => mapDevice(d, state.rooms)) : [] });
+    } catch (err: any) {
+      toast.error(err?.response?.data?.detail || `Failed to ${action.toLowerCase()} device`);
+    } finally {
+      setApprovalLoading(prev => ({ ...prev, [deviceId]: false }));
+    }
+  };
+
+  const openQrDialog = (device: Device, e: React.MouseEvent) => {
+    e.stopPropagation();
+    setQrDevice({ id: device.id, name: device.name });
+    setQrDialogOpen(true);
+  };
 
   // Filter devices
   const filteredDevices = state.devices.filter(device => {
@@ -338,12 +387,86 @@ export const Devices: React.FC = () => {
           <SelectContent className="bg-iot-secondary border-iot-subtle">
             <SelectItem value="ALL">All Subscriptions</SelectItem>
             <SelectItem value="PENDING">Pending</SelectItem>
+            <SelectItem value="PENDING_APPROVAL">Pending Approval</SelectItem>
             <SelectItem value="ACTIVE">Active</SelectItem>
             <SelectItem value="SUSPENDED">Suspended</SelectItem>
             <SelectItem value="EXPIRED">Expired</SelectItem>
           </SelectContent>
         </Select>
       </div>
+
+      {/* Pending Approval Section (Admin Only) */}
+      {isAdmin && pendingDevices.length > 0 && (
+        <div className="bg-iot-secondary rounded-2xl border border-iot-orange/30 overflow-hidden">
+          <div className="px-6 py-4 border-b border-iot-subtle flex items-center gap-2">
+            <Clock className="w-4 h-4 text-iot-orange" />
+            <h3 className="text-sm font-semibold text-iot-primary">
+              Pending Approval ({pendingDevices.length})
+            </h3>
+          </div>
+          <div className="p-4 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+            {pendingDevices.map((device) => (
+              <div
+                key={device.deviceId}
+                className="bg-iot-tertiary rounded-xl p-4 space-y-3 border border-iot-subtle"
+              >
+                <div className="flex items-center justify-between">
+                  <h4 className="text-sm font-medium text-iot-primary">{device.name}</h4>
+                  <span
+                    className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-semibold uppercase tracking-wide"
+                    style={{ backgroundColor: 'rgba(255, 165, 0, 0.15)', color: '#FFA500' }}
+                  >
+                    Pending
+                  </span>
+                </div>
+                <div className="grid grid-cols-2 gap-2 text-xs">
+                  <div>
+                    <p className="text-iot-muted">License Key</p>
+                    <p className="font-mono text-iot-secondary truncate" title={device.licenseKey}>
+                      {device.licenseKey.length > 16 ? `${device.licenseKey.substring(0, 16)}...` : device.licenseKey}
+                    </p>
+                  </div>
+                  <div>
+                    <p className="text-iot-muted">MAC Address</p>
+                    <p className="font-mono text-iot-secondary">{device.macAddress}</p>
+                  </div>
+                  <div>
+                    <p className="text-iot-muted">Room</p>
+                    <p className="text-iot-primary">{device.roomName || 'N/A'}</p>
+                  </div>
+                  <div>
+                    <p className="text-iot-muted">Linked By</p>
+                    <p className="text-iot-primary">{device.linkedByUsername || 'N/A'}</p>
+                  </div>
+                </div>
+                <div className="text-[10px] text-iot-muted">
+                  Linked: {new Date(device.linkedAt).toLocaleString()}
+                </div>
+                <div className="flex items-center gap-2">
+                  <Button
+                    size="sm"
+                    onClick={() => handleApproveReject(device.deviceId, 'APPROVE')}
+                    disabled={approvalLoading[device.deviceId]}
+                    className="flex-1 bg-iot-green/20 text-iot-green hover:bg-iot-green/30 border border-iot-green/30"
+                  >
+                    <CheckCircle className="w-3.5 h-3.5 mr-1.5" />
+                    {approvalLoading[device.deviceId] ? 'Processing...' : 'Approve'}
+                  </Button>
+                  <Button
+                    size="sm"
+                    onClick={() => handleApproveReject(device.deviceId, 'REJECT')}
+                    disabled={approvalLoading[device.deviceId]}
+                    className="flex-1 bg-iot-red/20 text-iot-red hover:bg-iot-red/30 border border-iot-red/30"
+                  >
+                    <XCircle className="w-3.5 h-3.5 mr-1.5" />
+                    Reject
+                  </Button>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
 
       {/* Table */}
       {filteredDevices.length > 0 ? (
@@ -434,6 +557,15 @@ export const Devices: React.FC = () => {
                             title="View details"
                           >
                             <ChevronRight className="w-4 h-4" />
+                          </button>
+
+                          {/* View QR */}
+                          <button
+                            onClick={(e) => openQrDialog(device, e)}
+                            className="p-1.5 rounded-lg text-iot-secondary hover:text-iot-cyan hover:bg-iot-cyan/10 transition-colors"
+                            title="View QR code"
+                          >
+                            <QrCode className="w-4 h-4" />
                           </button>
 
                           {isAdmin && (
@@ -811,6 +943,16 @@ export const Devices: React.FC = () => {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      {/* View QR Dialog */}
+      {qrDevice && (
+        <ViewQrDialog
+          deviceId={qrDevice.id}
+          deviceName={qrDevice.name}
+          open={qrDialogOpen}
+          onClose={() => { setQrDialogOpen(false); setQrDevice(null); }}
+        />
+      )}
     </div>
   );
 };

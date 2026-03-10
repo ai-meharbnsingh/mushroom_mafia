@@ -21,4 +21,21 @@ export const deviceService = {
 
   getPending: () =>
     api.get('/devices/pending').then(r => r.data),
+
+  // Device onboarding / linking
+  linkDevice: (data: { license_key: string; room_id: number }) =>
+    api.post('/devices/link', data).then(r => r.data),
+
+  getPendingApproval: () =>
+    api.get('/devices/pending').then(r => r.data),
+
+  approveDevice: (deviceId: string, action: 'APPROVE' | 'REJECT') =>
+    api.post(`/devices/${deviceId}/approve`, { action }).then(r => r.data),
+
+  // QR image storage
+  getQrImage: (deviceId: string) =>
+    api.get(`/devices/${deviceId}/qr-image`).then(r => r.data),
+
+  uploadQrImage: (deviceId: string, image: string) =>
+    api.post(`/devices/${deviceId}/qr-image`, { image }).then(r => r.data),
 };

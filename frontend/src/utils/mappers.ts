@@ -1,4 +1,4 @@
-import type { Plant, Room, Device, Alert, User, Report, SensorReading, RoomThresholds, AdminDashboardSummary } from '@/types';
+import type { Plant, Room, Device, Alert, User, Report, SensorReading, RoomThresholds, AdminDashboardSummary, PendingDevice } from '@/types';
 
 // --- Plant ---
 export function mapPlant(p: any): Plant {
@@ -160,6 +160,10 @@ export function mapSensorReading(data: any): SensorReading {
       co2: data.relay_states?.co2 === true || data.relayStates?.co2 === 'ON' ? 'ON' : 'OFF',
       humidity: data.relay_states?.humidity === true || data.relayStates?.humidity === 'ON' ? 'ON' : 'OFF',
       temperature: data.relay_states?.temperature === true || data.relayStates?.temperature === 'ON' ? 'ON' : 'OFF',
+      ahu: data.relay_states?.ahu === true || data.relayStates?.ahu === 'ON' ? 'ON' : 'OFF',
+      humidifier: data.relay_states?.humidifier === true || data.relayStates?.humidifier === 'ON' ? 'ON' : 'OFF',
+      duct_fan: data.relay_states?.duct_fan === true || data.relayStates?.duct_fan === 'ON' ? 'ON' : 'OFF',
+      extra: data.relay_states?.extra === true || data.relayStates?.extra === 'ON' ? 'ON' : 'OFF',
     },
     timestamp: data.timestamp ?? new Date().toISOString(),
   };
@@ -321,5 +325,19 @@ export function toUserUpdate(data: any) {
     mobile: data.mobile,
     role: data.role,
     assigned_plants: data.assignedPlants?.map(Number),
+  };
+}
+
+// --- Pending Device (from onboarding/approval flow) ---
+export function mapPendingDevice(d: any): PendingDevice {
+  return {
+    deviceId: String(d.device_id ?? d.id ?? ''),
+    name: d.device_name ?? d.name ?? '',
+    licenseKey: d.license_key ?? d.licenseKey ?? '',
+    macAddress: d.mac_address ?? d.macAddress ?? '',
+    roomId: String(d.room_id ?? d.roomId ?? ''),
+    roomName: d.room_name ?? d.roomName ?? '',
+    linkedByUsername: d.linked_by_username ?? d.linkedByUsername ?? '',
+    linkedAt: d.linked_at ?? d.linkedAt ?? new Date().toISOString(),
   };
 }

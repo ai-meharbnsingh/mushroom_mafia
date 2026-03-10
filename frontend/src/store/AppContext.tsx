@@ -11,6 +11,7 @@ import type {
   DashboardSummary,
   Toast,
   RelayState,
+  RelayType,
   TriggerType,
 } from '@/types';
 
@@ -101,7 +102,7 @@ type Action =
   | { type: 'SET_DASHBOARD_SUMMARY'; payload: DashboardSummary }
   | { type: 'SET_SELECTED_ROOM'; payload: string | null }
   | { type: 'SET_SELECTED_PLANT'; payload: string | null }
-  | { type: 'UPDATE_RELAY_STATE'; payload: { roomId: string; relay: 'co2' | 'humidity' | 'temperature'; state: RelayState; trigger: TriggerType } }
+  | { type: 'UPDATE_RELAY_STATE'; payload: { roomId: string; relay: RelayType; state: RelayState; trigger: TriggerType } }
   | { type: 'ADD_PLANT'; payload: Plant }
   | { type: 'UPDATE_PLANT'; payload: Plant }
   | { type: 'DELETE_PLANT'; payload: string }
@@ -458,7 +459,7 @@ export function useAppActions() {
 
   const updateRelayState = useCallback((
     roomId: string,
-    relay: 'co2' | 'humidity' | 'temperature',
+    relay: RelayType,
     state: RelayState,
     trigger: TriggerType
   ) => {

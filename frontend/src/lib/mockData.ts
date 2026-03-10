@@ -230,6 +230,10 @@ export function generateMockSensorReading(roomId: string, deviceId: string): Sen
       co2: Math.random() > 0.5 ? 'ON' : 'OFF',
       humidity: Math.random() > 0.3 ? 'ON' : 'OFF',
       temperature: Math.random() > 0.4 ? 'ON' : 'OFF',
+      ahu: Math.random() > 0.5 ? 'ON' : 'OFF',
+      humidifier: Math.random() > 0.5 ? 'ON' : 'OFF',
+      duct_fan: Math.random() > 0.5 ? 'ON' : 'OFF',
+      extra: 'OFF',
     },
     timestamp: new Date().toISOString(),
   };

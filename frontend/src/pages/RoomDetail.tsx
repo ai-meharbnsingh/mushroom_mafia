@@ -1,18 +1,20 @@
 import React, { useEffect, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { ArrowLeft } from 'lucide-react';
+import { ArrowLeft, QrCode } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { CircularGauge } from '@/components/gauges/CircularGauge';
 import { BagTemperatureStrip } from '@/components/gauges/BagTemperatureStrip';
 import { RelayToggle } from '@/components/ui-custom/RelayToggle';
 import { StatusBadge } from '@/components/ui-custom/StatusBadge';
+import { LinkDeviceDialog } from '@/components/ui-custom/LinkDeviceDialog';
 import { useApp } from '@/store/AppContext';
+import { useAuth } from '@/hooks/useAuth';
 import { useToast } from '@/hooks/useToast';
 import { useWebSocketSimulation } from '@/hooks/useWebSocket';
 import { readingService } from '@/services/readingService';
 import { thresholdService } from '@/services/thresholdService';
-import type { RelayState, TriggerType } from '@/types';
+import type { RelayState, TriggerType, RelayType } from '@/types';
 
 import {
   LineChart,
@@ -29,14 +31,22 @@ export const RoomDetail: React.FC = () => {
   const { roomId } = useParams<{ roomId: string }>();
   const navigate = useNavigate();
   const { state } = useApp();
+  const { checkPermission } = useAuth();
   const toast = useToast();
   const { sendRelayCommand } = useWebSocketSimulation();
-  
+
+  const isAdmin = checkPermission('ADMIN');
+  const [linkDeviceOpen, setLinkDeviceOpen] = useState(false);
+
   const [activeChart, setActiveChart] = useState<'co2' | 'temperature' | 'humidity'>('co2');
   const [relayTriggers, setRelayTriggers] = useState<Record<string, TriggerType>>({
     co2: 'AUTO',
     humidity: 'AUTO',
     temperature: 'AUTO',
+    ahu: 'AUTO',
+    humidifier: 'AUTO',
+    duct_fan: 'AUTO',
+    extra: 'AUTO',
   });
   
   const room = state.rooms.find(r => r.id === roomId);
@@ -68,13 +78,23 @@ export const RoomDetail: React.FC = () => {
   
   if (!room) return null;
   
-  const handleRelayToggle = (relay: 'co2' | 'humidity' | 'temperature', newState: RelayState) => {
+  const relayLabels: Record<RelayType, string> = {
+    co2: 'CO2',
+    humidity: 'Humidity',
+    temperature: 'Temperature',
+    ahu: 'AHU',
+    humidifier: 'Humidifier',
+    duct_fan: 'Duct/Fan',
+    extra: 'Extra',
+  };
+
+  const handleRelayToggle = (relay: RelayType, newState: RelayState) => {
     sendRelayCommand(room.id, relay, newState);
     setRelayTriggers(prev => ({
       ...prev,
       [relay]: 'MANUAL',
     }));
-    toast.success(`${relay.charAt(0).toUpperCase() + relay.slice(1)} relay turned ${newState}`);
+    toast.success(`${relayLabels[relay]} relay turned ${newState}`);
   };
   
   const handleThresholdSave = async () => {
@@ -122,22 +142,34 @@ export const RoomDetail: React.FC = () => {
   return (
     <div className="space-y-6">
       {/* Header */}
-      <div className="flex items-center gap-4">
-        <Button
-          variant="outline"
-          size="icon"
-          onClick={() => navigate('/rooms')}
-          className="border-iot-subtle text-iot-secondary hover:text-iot-primary"
-        >
-          <ArrowLeft className="w-5 h-5" />
-        </Button>
-        <div>
-          <h1 className="text-2xl font-bold text-iot-primary">{room.name}</h1>
-          <div className="flex items-center gap-3 mt-1">
-            <span className="text-sm text-iot-secondary font-mono">{room.code}</span>
-            <StatusBadge status={isOnline ? 'online' : 'offline'} />
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-4">
+          <Button
+            variant="outline"
+            size="icon"
+            onClick={() => navigate('/rooms')}
+            className="border-iot-subtle text-iot-secondary hover:text-iot-primary"
+          >
+            <ArrowLeft className="w-5 h-5" />
+          </Button>
+          <div>
+            <h1 className="text-2xl font-bold text-iot-primary">{room.name}</h1>
+            <div className="flex items-center gap-3 mt-1">
+              <span className="text-sm text-iot-secondary font-mono">{room.code}</span>
+              <StatusBadge status={isOnline ? 'online' : 'offline'} />
+            </div>
           </div>
         </div>
+        {isAdmin && (
+          <Button
+            onClick={() => setLinkDeviceOpen(true)}
+            variant="outline"
+            className="border-iot-cyan/30 text-iot-cyan hover:bg-iot-cyan/10"
+          >
+            <QrCode className="w-4 h-4 mr-2" />
+            Link Device
+          </Button>
+        )}
       </div>
       
       {/* Live Gauges */}
@@ -209,25 +241,16 @@ export const RoomDetail: React.FC = () => {
         <div className="bg-iot-secondary rounded-2xl p-6 border border-iot-subtle">
           <h3 className="text-sm font-medium text-iot-secondary mb-4">Relay Controls</h3>
           {reading ? (
-            <div className="flex items-center justify-around">
-              <RelayToggle
-                label="CO2"
-                state={reading.relayStates.co2}
-                trigger={relayTriggers.co2}
-                onToggle={(state) => handleRelayToggle('co2', state)}
-              />
-              <RelayToggle
-                label="Humidity"
-                state={reading.relayStates.humidity}
-                trigger={relayTriggers.humidity}
-                onToggle={(state) => handleRelayToggle('humidity', state)}
-              />
-              <RelayToggle
-                label="Temperature"
-                state={reading.relayStates.temperature}
-                trigger={relayTriggers.temperature}
-                onToggle={(state) => handleRelayToggle('temperature', state)}
-              />
+            <div className="grid grid-cols-4 gap-4">
+              {(Object.keys(relayLabels) as RelayType[]).map((relay) => (
+                <RelayToggle
+                  key={relay}
+                  label={relayLabels[relay]}
+                  state={reading.relayStates[relay] ?? 'OFF'}
+                  trigger={relayTriggers[relay] ?? 'AUTO'}
+                  onToggle={(state) => handleRelayToggle(relay, state)}
+                />
+              ))}
             </div>
           ) : (
             <p className="text-sm text-iot-muted">No data available</p>
@@ -456,6 +479,16 @@ export const RoomDetail: React.FC = () => {
             </div>
           </div>
         </div>
+      )}
+
+      {/* Link Device Dialog */}
+      {roomId && (
+        <LinkDeviceDialog
+          roomId={roomId}
+          roomName={room.name}
+          open={linkDeviceOpen}
+          onClose={() => setLinkDeviceOpen(false)}
+        />
       )}
     </div>
   );

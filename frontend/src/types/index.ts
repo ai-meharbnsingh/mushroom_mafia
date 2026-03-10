@@ -60,7 +60,7 @@ export interface Room {
 }
 
 // Device Types
-export type SubscriptionStatus = 'PENDING' | 'ACTIVE' | 'SUSPENDED' | 'EXPIRED';
+export type SubscriptionStatus = 'PENDING' | 'ACTIVE' | 'SUSPENDED' | 'EXPIRED' | 'PENDING_APPROVAL';
 export type CommunicationMode = 'HTTP' | 'MQTT';
 
 export interface Device {
@@ -111,16 +111,44 @@ export interface SensorReading {
 export type RelayState = 'ON' | 'OFF';
 export type TriggerType = 'AUTO' | 'MANUAL' | 'SCHEDULE';
 
+export type RelayType = 'co2' | 'humidity' | 'temperature' | 'ahu' | 'humidifier' | 'duct_fan' | 'extra';
+
 export interface RelayStates {
   co2: RelayState;
   humidity: RelayState;
   temperature: RelayState;
+  ahu: RelayState;
+  humidifier: RelayState;
+  duct_fan: RelayState;
+  extra: RelayState;
 }
 
 export interface RelayTriggers {
   co2: TriggerType;
   humidity: TriggerType;
   temperature: TriggerType;
+  ahu: TriggerType;
+  humidifier: TriggerType;
+  duct_fan: TriggerType;
+  extra: TriggerType;
+}
+
+export interface PendingDevice {
+  deviceId: string;
+  name: string;
+  licenseKey: string;
+  macAddress: string;
+  roomId: string;
+  roomName: string;
+  linkedByUsername: string;
+  linkedAt: string;
+}
+
+export interface QrScanResult {
+  v: number;
+  lic: string;
+  ap: string;
+  pw: string;
 }
 
 // Threshold Types

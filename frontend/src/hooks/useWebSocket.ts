@@ -1,7 +1,7 @@
 import { useEffect, useRef, useCallback } from 'react';
 import { useAppActions } from '@/store/AppContext';
 import { mapSensorReading } from '@/utils/mappers';
-import type { Alert } from '@/types';
+import type { Alert, RelayType } from '@/types';
 
 const WS_BASE_URL = import.meta.env.VITE_WS_BASE_URL || 'ws://localhost:3800/api/v1';
 
@@ -121,7 +121,7 @@ export function useWebSocketSimulation() {
 
   const sendRelayCommand = useCallback(async (
     roomId: string,
-    relay: 'co2' | 'humidity' | 'temperature',
+    relay: RelayType,
     state: 'ON' | 'OFF'
   ) => {
     // Use REST API for relay commands for reliability
