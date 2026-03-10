@@ -1,5 +1,5 @@
 from sqlalchemy import (
-    Column, Integer, String, Boolean, DateTime, Enum, ForeignKey, Index,
+    Column, Integer, String, Boolean, DateTime, Text, Enum, ForeignKey, Index,
 )
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
@@ -34,10 +34,14 @@ class Device(Base):
     communication_mode = Column(
         Enum(CommunicationMode), default=CommunicationMode.HTTP
     )
+    linked_by_user_id = Column(Integer, ForeignKey("users.user_id"), nullable=True)
+    linked_at = Column(DateTime, nullable=True)
+    qr_code_image = Column(Text, nullable=True)
     registered_at = Column(DateTime, server_default=func.now())
     updated_at = Column(DateTime, server_default=func.now(), onupdate=func.now())
 
     room = relationship("Room", back_populates="devices")
+    linked_by_user = relationship("User", foreign_keys=[linked_by_user_id])
     assigned_plant = relationship("Plant", foreign_keys=[assigned_to_plant_id])
     readings = relationship("RoomReading", back_populates="device")
     relay_statuses = relationship("RelayStatus", back_populates="device")

@@ -78,8 +78,48 @@ class DeviceRegisterResponse(BaseModel):
 
 class DeviceProvisioningInfo(BaseModel):
     """Returned when ESP32 polls for MQTT credentials."""
-    status: str  # "pending" or "ready"
+    status: str  # "pending", "pending_approval", or "ready"
+    message: Optional[str] = None
     mqtt_password: Optional[str] = None
     mqtt_host: Optional[str] = None
     mqtt_port: Optional[int] = None
     device_id: Optional[int] = None
+
+
+# --- Device Onboarding (QR Scan / Link / Approve) ---
+
+
+class DeviceLinkRequest(BaseModel):
+    """Link a device to a room via QR scan."""
+    license_key: str
+    room_id: int
+
+
+class DeviceLinkResponse(BaseModel):
+    device_id: int
+    name: str
+    status: str
+    room_id: int
+
+
+class PendingApprovalResponse(BaseModel):
+    device_id: int
+    name: str
+    license_key: str
+    mac_address: str
+    room_id: Optional[int] = None
+    room_name: Optional[str] = None
+    linked_by_username: Optional[str] = None
+    linked_at: Optional[datetime] = None
+
+
+class DeviceApproveRequest(BaseModel):
+    action: str  # "APPROVE" or "REJECT"
+
+
+class QrImageUpload(BaseModel):
+    image: str  # base64 PNG string (e.g., "data:image/png;base64,iVBOR...")
+
+
+class QrImageResponse(BaseModel):
+    image: str

@@ -34,6 +34,10 @@ class RelayType(str, enum.Enum):
     CO2 = "CO2"
     HUMIDITY = "HUMIDITY"
     TEMPERATURE = "TEMPERATURE"
+    AHU = "AHU"
+    HUMIDIFIER = "HUMIDIFIER"
+    DUCT_FAN = "DUCT_FAN"
+    EXTRA = "EXTRA"
 
 
 class TriggerType(str, enum.Enum):
@@ -80,6 +84,7 @@ class ReportFormat(str, enum.Enum):
 
 class SubscriptionStatus(str, enum.Enum):
     PENDING = "PENDING"
+    PENDING_APPROVAL = "PENDING_APPROVAL"
     ACTIVE = "ACTIVE"
     SUSPENDED = "SUSPENDED"
     EXPIRED = "EXPIRED"

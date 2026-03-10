@@ -109,6 +109,12 @@ async def poll_provisioning(
     if device.subscription_status == SubscriptionStatus.PENDING:
         return DeviceProvisioningInfo(status="pending")
 
+    if device.subscription_status == SubscriptionStatus.PENDING_APPROVAL:
+        return DeviceProvisioningInfo(
+            status="pending_approval",
+            message="Awaiting admin approval",
+        )
+
     if (
         device.subscription_status == SubscriptionStatus.ACTIVE
         and device.device_password

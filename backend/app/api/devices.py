@@ -1,3 +1,5 @@
+from datetime import datetime
+
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, or_
@@ -16,6 +18,12 @@ from app.schemas.device import (
     DeviceAssignRequest,
     DeviceAssignResponse,
     KillSwitchRequest,
+    DeviceLinkRequest,
+    DeviceLinkResponse,
+    PendingApprovalResponse,
+    DeviceApproveRequest,
+    QrImageUpload,
+    QrImageResponse,
 )
 from app.utils.security import (
     generate_license_key,
@@ -23,6 +31,7 @@ from app.utils.security import (
     encrypt_device_password,
 )
 from app.api.deps import get_current_user, require_roles
+from app.services.ws_manager import ws_manager
 
 router = APIRouter()
 
@@ -339,3 +348,260 @@ async def revoke_device(
         pass  # MQTT may not be running during dev
 
     return {"detail": "Device revoked successfully"}
+
+
+# --- Device Onboarding (QR Scan / Link / Approve / QR Image) ---
+
+
+@router.post("/link", response_model=DeviceLinkResponse)
+async def link_device(
+    link_in: DeviceLinkRequest,
+    current_user: User = Depends(
+        require_roles(UserRole.SUPER_ADMIN, UserRole.ADMIN)
+    ),
+    db: AsyncSession = Depends(get_db),
+):
+    """Link a device to a room via QR scan (ADMIN+ only).
+
+    Finds device by license_key, validates it is in PENDING status,
+    validates the room belongs to the user's organization, then sets
+    the device to PENDING_APPROVAL status awaiting admin approval.
+    """
+    # Find device by license_key
+    result = await db.execute(
+        select(Device).where(
+            Device.license_key == link_in.license_key,
+            Device.is_active == True,
+        )
+    )
+    device = result.scalar_one_or_none()
+    if not device:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Device not found with the provided license key",
+        )
+
+    # Device must be in PENDING status to be linked
+    if device.subscription_status != SubscriptionStatus.PENDING:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Device is not in PENDING status (current: {device.subscription_status.value})",
+        )
+
+    # Validate room exists and belongs to the user's organization
+    room_result = await db.execute(
+        select(Room)
+        .join(Plant, Room.plant_id == Plant.plant_id)
+        .where(
+            Room.room_id == link_in.room_id,
+            Plant.owner_id == current_user.owner_id,
+        )
+    )
+    room = room_result.scalar_one_or_none()
+    if not room:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Room not found or does not belong to your organization",
+        )
+
+    # Update device
+    device.subscription_status = SubscriptionStatus.PENDING_APPROVAL
+    device.room_id = link_in.room_id
+    device.linked_by_user_id = current_user.user_id
+    device.linked_at = datetime.utcnow()
+
+    await db.commit()
+    await db.refresh(device)
+
+    # Broadcast WebSocket event to plant owner
+    try:
+        owner_result = await db.execute(
+            select(Plant.owner_id)
+            .join(Room, Room.plant_id == Plant.plant_id)
+            .where(Room.room_id == device.room_id)
+        )
+        owner_id = owner_result.scalar_one_or_none()
+        if owner_id:
+            await ws_manager.broadcast_to_owner(
+                owner_id,
+                "device_registered",
+                {
+                    "device_id": device.device_id,
+                    "device_name": device.device_name or f"Device-{device.device_id}",
+                    "room_id": device.room_id,
+                    "status": "PENDING_APPROVAL",
+                    "timestamp": datetime.utcnow().isoformat(),
+                },
+            )
+    except Exception:
+        pass  # WebSocket notification is best-effort
+
+    return DeviceLinkResponse(
+        device_id=device.device_id,
+        name=device.device_name or f"Device-{device.device_id}",
+        status=device.subscription_status.value,
+        room_id=device.room_id,
+    )
+
+
+@router.get("/pending-approval", response_model=list[PendingApprovalResponse])
+async def list_pending_approval_devices(
+    current_user: User = Depends(
+        require_roles(UserRole.SUPER_ADMIN, UserRole.ADMIN)
+    ),
+    db: AsyncSession = Depends(get_db),
+):
+    """List devices with subscription_status=PENDING_APPROVAL (ADMIN+ only)."""
+    result = await db.execute(
+        select(
+            Device.device_id,
+            Device.device_name,
+            Device.license_key,
+            Device.mac_address,
+            Device.room_id,
+            Room.room_name,
+            User.username,
+            Device.linked_at,
+        )
+        .outerjoin(Room, Device.room_id == Room.room_id)
+        .outerjoin(User, Device.linked_by_user_id == User.user_id)
+        .where(
+            Device.subscription_status == SubscriptionStatus.PENDING_APPROVAL,
+            Device.is_active == True,
+        )
+    )
+    rows = result.all()
+
+    return [
+        PendingApprovalResponse(
+            device_id=row.device_id,
+            name=row.device_name or f"Device-{row.device_id}",
+            license_key=row.license_key,
+            mac_address=row.mac_address,
+            room_id=row.room_id,
+            room_name=row.room_name,
+            linked_by_username=row.username,
+            linked_at=row.linked_at,
+        )
+        for row in rows
+    ]
+
+
+@router.post("/{device_id}/approve")
+async def approve_device(
+    device_id: int,
+    approve_in: DeviceApproveRequest,
+    current_user: User = Depends(
+        require_roles(UserRole.SUPER_ADMIN, UserRole.ADMIN)
+    ),
+    db: AsyncSession = Depends(get_db),
+):
+    """Approve or reject a device that is pending approval (ADMIN+ only).
+
+    APPROVE: Generate MQTT credentials, set status to ACTIVE.
+    REJECT: Revert status to PENDING, clear room assignment and link info.
+    """
+    result = await db.execute(
+        select(Device).where(
+            Device.device_id == device_id, Device.is_active == True
+        )
+    )
+    device = result.scalar_one_or_none()
+    if not device:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Device not found"
+        )
+
+    if device.subscription_status != SubscriptionStatus.PENDING_APPROVAL:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Device is not pending approval (current: {device.subscription_status.value})",
+        )
+
+    action = approve_in.action.upper()
+    if action not in ("APPROVE", "REJECT"):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Action must be APPROVE or REJECT",
+        )
+
+    if action == "APPROVE":
+        # Generate MQTT credentials
+        plain_password = generate_device_password()
+        encrypted_password = encrypt_device_password(plain_password)
+        device.device_password = encrypted_password
+        device.subscription_status = SubscriptionStatus.ACTIVE
+        await db.commit()
+        await db.refresh(device)
+        return {
+            "detail": "Device approved successfully",
+            "device_id": device.device_id,
+            "status": device.subscription_status.value,
+        }
+    else:
+        # REJECT: revert to PENDING, clear link info
+        device.subscription_status = SubscriptionStatus.PENDING
+        device.room_id = None
+        device.linked_by_user_id = None
+        device.linked_at = None
+        await db.commit()
+        await db.refresh(device)
+        return {
+            "detail": "Device rejected, reverted to PENDING",
+            "device_id": device.device_id,
+            "status": device.subscription_status.value,
+        }
+
+
+@router.post("/{device_id}/qr-image")
+async def upload_qr_image(
+    device_id: int,
+    qr_in: QrImageUpload,
+    current_user: User = Depends(
+        require_roles(UserRole.SUPER_ADMIN, UserRole.ADMIN)
+    ),
+    db: AsyncSession = Depends(get_db),
+):
+    """Upload a QR code image (base64) for a device (ADMIN+ only)."""
+    result = await db.execute(
+        select(Device).where(
+            Device.device_id == device_id, Device.is_active == True
+        )
+    )
+    device = result.scalar_one_or_none()
+    if not device:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Device not found"
+        )
+
+    device.qr_code_image = qr_in.image
+    await db.commit()
+
+    return {"detail": "QR code image saved successfully"}
+
+
+@router.get("/{device_id}/qr-image", response_model=QrImageResponse)
+async def get_qr_image(
+    device_id: int,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Get the stored QR code image for a device."""
+    result = await db.execute(
+        select(Device).where(
+            Device.device_id == device_id, Device.is_active == True
+        )
+    )
+    device = result.scalar_one_or_none()
+    if not device:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Device not found"
+        )
+
+    if not device.qr_code_image:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="No QR code image stored for this device",
+        )
+
+    return QrImageResponse(image=device.qr_code_image)
