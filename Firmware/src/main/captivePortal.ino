@@ -100,6 +100,7 @@ void startCaptivePortal() {
     // Block here processing DNS while portal is active
     // (the device has no WiFi credentials -- nothing else to do)
     while (portalRunning) {
+        esp_task_wdt_reset();  // Risk 2: Feed watchdog in portal loop
         dnsServer.processNextRequest();
         delay(10);
     }

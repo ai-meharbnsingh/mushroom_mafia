@@ -106,13 +106,16 @@ async def poll_provisioning(
             detail="Device not found",
         )
 
+    api_url = settings.API_BASE_URL
+
     if device.subscription_status == SubscriptionStatus.PENDING:
-        return DeviceProvisioningInfo(status="pending")
+        return DeviceProvisioningInfo(status="pending", api_base_url=api_url)
 
     if device.subscription_status == SubscriptionStatus.PENDING_APPROVAL:
         return DeviceProvisioningInfo(
             status="pending_approval",
             message="Awaiting admin approval",
+            api_base_url=api_url,
         )
 
     if (
@@ -126,15 +129,16 @@ async def poll_provisioning(
             mqtt_host=settings.MQTT_BROKER_HOST,
             mqtt_port=settings.MQTT_BROKER_PORT,
             device_id=device.device_id,
+            api_base_url=api_url,
         )
 
     if device.subscription_status == SubscriptionStatus.SUSPENDED:
-        return DeviceProvisioningInfo(status="suspended")
+        return DeviceProvisioningInfo(status="suspended", api_base_url=api_url)
 
     if device.subscription_status == SubscriptionStatus.EXPIRED:
-        return DeviceProvisioningInfo(status="expired")
+        return DeviceProvisioningInfo(status="expired", api_base_url=api_url)
 
-    return DeviceProvisioningInfo(status="pending")
+    return DeviceProvisioningInfo(status="pending", api_base_url=api_url)
 
 
 @router.post("/readings")

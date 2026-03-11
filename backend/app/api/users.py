@@ -110,6 +110,37 @@ async def update_user(
     return user
 
 
+@router.post("/{user_id}/unlock", status_code=status.HTTP_200_OK)
+async def unlock_user(
+    user_id: int,
+    current_user: User = Depends(
+        require_roles(UserRole.ADMIN, UserRole.SUPER_ADMIN)
+    ),
+    db: AsyncSession = Depends(get_db),
+):
+    """Unlock a locked user account. ADMIN+ only. Resets login attempts and lockout."""
+    result = await db.execute(
+        select(User).where(User.user_id == user_id, User.is_active == True)
+    )
+    user = result.scalar_one_or_none()
+    if not user:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="User not found"
+        )
+    if (
+        current_user.role != UserRole.SUPER_ADMIN
+        and user.owner_id != current_user.owner_id
+    ):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Not allowed to manage this user",
+        )
+    user.login_attempts = 0
+    user.locked_until = None
+    await db.commit()
+    return {"detail": f"User '{user.username}' has been unlocked"}
+
+
 @router.delete("/{user_id}", status_code=status.HTTP_200_OK)
 async def delete_user(
     user_id: int,

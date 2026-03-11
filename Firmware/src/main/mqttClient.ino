@@ -97,6 +97,7 @@ bool connectMQTT() {
             lcd.setCursor(0, 1);
             lcd.print("TLS fail rc=");
             lcd.print(mqttClient.state());
+            esp_task_wdt_reset();  // Risk 2: Feed watchdog between MQTT retries
             delay(5000);
         }
     }

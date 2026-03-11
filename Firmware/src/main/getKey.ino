@@ -57,15 +57,18 @@ void inputKey() {
   lcd.setCursor(0,0);
   lcd.print("KEY AUTHENTICATION");
   lcd.setCursor(0,1);
-  lcd.print("Auto-Auth in 10s...");
   Serial.println("\n--- LICENSE KEY INPUT ---");
   Serial.println("Type your key in Serial Monitor and press Enter.");
-  Serial.println("Waiting 10s for auto-auth (LIC-877V-4REX-K60T)...");
 
+#ifdef DEBUG_MODE
+  // ─── Risk 6: Auto-auth with dev key only in DEBUG builds ──────
+  lcd.print("Auto-Auth in 10s...");
+  Serial.println("Waiting 10s for auto-auth (DEBUG_MODE)...");
   unsigned long startTime = millis();
   bool keyEntered = false;
 
   while (millis() - startTime < 10000) {
+    esp_task_wdt_reset();  // Feed watchdog during wait
     if (Serial.available()) {
       deviceKeyTemp = Serial.readStringUntil('\n');
       deviceKeyTemp.trim();
@@ -74,23 +77,35 @@ void inputKey() {
         break;
       }
     }
-    // Update countdown on LCD
     lcd.setCursor(15, 1);
     lcd.print(10 - (millis() - startTime) / 1000);
     lcd.print("s ");
     delay(100);
   }
 
-  // If no key entered, use the correct linked key
   if (!keyEntered) {
     deviceKeyTemp = "LIC-877V-4REX-K60T";
-    Serial.println("No input. Auto-using key: LIC-877V-4REX-K60T");
+    Serial.println("No input. Auto-using dev key (DEBUG_MODE)");
     lcd.clear();
-    lcd.print("AUTO-USING KEY:");
-    lcd.setCursor(0,1);
-    lcd.print("P5X8...");
+    lcd.print("AUTO-USING DEV KEY");
     delay(2000);
   }
+#else
+  // ─── Risk 6: Production — require manual key entry via Serial ───
+  lcd.print("Enter key via USB...");
+  Serial.println("Waiting for key input via Serial...");
+  while (true) {
+    esp_task_wdt_reset();  // Feed watchdog during wait
+    if (Serial.available()) {
+      deviceKeyTemp = Serial.readStringUntil('\n');
+      deviceKeyTemp.trim();
+      if (deviceKeyTemp.length() > 0) {
+        break;
+      }
+    }
+    delay(100);
+  }
+#endif
 
   if(!authenticateDevKey(deviceKeyTemp.c_str()))  {
     Serial.println("Auth Failed. Retrying...");

@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { gsap } from 'gsap';
 import {
   Cpu,
@@ -13,6 +13,8 @@ import {
   AlertCircle,
   Loader2,
   ScanLine,
+  WifiOff,
+  Download,
 } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
@@ -21,7 +23,59 @@ import { deviceService } from '@/services/deviceService';
 import { firmwareService } from '@/services/firmwareService';
 import { DeviceSticker } from '@/components/ui-custom/DeviceSticker';
 import { QrScanner } from '@/components/ui-custom/QrScanner';
-import type { FirmwareVersion, QrScanResult } from '@/types';
+import type { FirmwareVersion, FlashStage, QrScanResult } from '@/types';
+
+// Web Serial API type declarations
+declare global {
+  interface Navigator {
+    serial?: {
+      requestPort(options?: SerialPortRequestOptions): Promise<SerialPort>;
+      getPorts(): Promise<SerialPort[]>;
+    };
+  }
+
+  interface SerialPortRequestOptions {
+    filters?: SerialPortFilter[];
+  }
+
+  interface SerialPortFilter {
+    usbVendorId?: number;
+    usbProductId?: number;
+  }
+
+  interface SerialPort {
+    open(options: SerialOptions): Promise<void>;
+    close(): Promise<void>;
+    readable: ReadableStream<Uint8Array> | null;
+    writable: WritableStream<Uint8Array> | null;
+    getInfo(): SerialPortInfo;
+  }
+
+  interface SerialOptions {
+    baudRate: number;
+    dataBits?: number;
+    stopBits?: number;
+    parity?: ParityType;
+    bufferSize?: number;
+    flowControl?: FlowControlType;
+  }
+
+  type ParityType = 'none' | 'even' | 'odd';
+  type FlowControlType = 'none' | 'hardware';
+
+  interface SerialPortInfo {
+    usbVendorId?: number;
+    usbProductId?: number;
+  }
+}
+
+// Known ESP32 USB vendor/product IDs
+const ESP32_FILTERS: SerialPortFilter[] = [
+  { usbVendorId: 0x10c4 }, // Silicon Labs CP210x
+  { usbVendorId: 0x1a86 }, // QinHeng CH340
+  { usbVendorId: 0x0403 }, // FTDI
+  { usbVendorId: 0x303a }, // Espressif native USB
+];
 
 interface ProvisionedDevice {
   deviceId: number;
@@ -41,6 +95,11 @@ const STEPS: { key: WizardStep; label: string; icon: React.ElementType }[] = [
   { key: 'sticker', label: 'Sticker', icon: Tag },
 ];
 
+/** Check if the browser supports Web Serial API. */
+const isWebSerialSupported = (): boolean => {
+  return typeof navigator !== 'undefined' && 'serial' in navigator;
+};
+
 export const FlashDevice: React.FC = () => {
   const toast = useToast();
   const pageRef = useRef<HTMLDivElement>(null);
@@ -56,14 +115,29 @@ export const FlashDevice: React.FC = () => {
   // Firmware state
   const [latestFirmware, setLatestFirmware] = useState<FirmwareVersion | null>(null);
   const [firmwareLoading, setFirmwareLoading] = useState(false);
+  const [firmwareBin, setFirmwareBin] = useState<ArrayBuffer | null>(null);
+  const [firmwareDownloading, setFirmwareDownloading] = useState(false);
 
-  // Web Serial placeholder state
+  // Web Serial state
+  const [serialSupported] = useState(isWebSerialSupported());
+  const [serialPort, setSerialPort] = useState<SerialPort | null>(null);
   const [serialConnected, setSerialConnected] = useState(false);
+  const [serialConnecting, setSerialConnecting] = useState(false);
+  const [serialLog, setSerialLog] = useState<string[]>([]);
+
+  // Flash progress state
+  const [flashStage, setFlashStage] = useState<FlashStage>('idle');
   const [flashProgress, setFlashProgress] = useState(0);
   const [flashComplete, setFlashComplete] = useState(false);
+  const [flashError, setFlashError] = useState<string | null>(null);
 
   // QR Scanner state
   const [scannerOpen, setScannerOpen] = useState(false);
+
+  // Append to serial log
+  const appendLog = useCallback((msg: string) => {
+    setSerialLog((prev) => [...prev.slice(-49), msg]);
+  }, []);
 
   // Entrance animation
   useEffect(() => {
@@ -76,7 +150,7 @@ export const FlashDevice: React.FC = () => {
     }
   }, []);
 
-  // Fetch latest firmware
+  // Fetch latest firmware metadata
   useEffect(() => {
     const fetchFirmware = async () => {
       setFirmwareLoading(true);
@@ -84,7 +158,6 @@ export const FlashDevice: React.FC = () => {
         const fw = await firmwareService.getLatestFirmware();
         setLatestFirmware(fw);
       } catch {
-        // Firmware endpoint might not exist yet
         setLatestFirmware(null);
       } finally {
         setFirmwareLoading(false);
@@ -113,19 +186,250 @@ export const FlashDevice: React.FC = () => {
     setCurrentStep(step);
   };
 
-  // Placeholder: Web Serial connect
-  const handleSerialConnect = () => {
-    toast.info('Web Serial support coming soon. Please enter MAC address manually in Step 3.');
-    setSerialConnected(true);
-    goNext();
+  // --- Web Serial: Connect ---
+  const handleSerialConnect = async () => {
+    if (!serialSupported) {
+      toast.error('Web Serial API is not supported in this browser. Use Chrome or Edge.');
+      return;
+    }
+
+    setSerialConnecting(true);
+    appendLog('Requesting serial port...');
+
+    try {
+      const port = await navigator.serial!.requestPort({ filters: ESP32_FILTERS });
+      appendLog('Port selected. Opening at 115200 baud...');
+
+      await port.open({ baudRate: 115200 });
+      setSerialPort(port);
+      setSerialConnected(true);
+      appendLog('Serial port connected successfully.');
+
+      // Try to read MAC address from the device via serial output
+      const portInfo = port.getInfo();
+      appendLog(
+        `Device info: vendorId=0x${(portInfo.usbVendorId ?? 0).toString(16)}, productId=0x${(portInfo.usbProductId ?? 0).toString(16)}`
+      );
+
+      toast.success('ESP32 connected via USB serial.');
+      goNext();
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : 'Failed to connect';
+      if (message.includes('No port selected')) {
+        appendLog('Port selection cancelled by user.');
+      } else {
+        appendLog(`Connection error: ${message}`);
+        toast.error(`Serial connection failed: ${message}`);
+      }
+    } finally {
+      setSerialConnecting(false);
+    }
   };
 
-  // Placeholder: Flash firmware
-  const handleFlash = () => {
-    toast.info('Web Serial flashing coming soon. Proceeding to device info.');
-    setFlashProgress(100);
-    setFlashComplete(true);
-    setTimeout(() => goNext(), 500);
+  // --- Web Serial: Disconnect ---
+  const handleSerialDisconnect = async () => {
+    if (serialPort) {
+      try {
+        await serialPort.close();
+        appendLog('Serial port closed.');
+      } catch {
+        // Port may already be closed
+      }
+      setSerialPort(null);
+      setSerialConnected(false);
+    }
+  };
+
+  // --- Download firmware binary ---
+  const handleDownloadFirmware = async () => {
+    setFirmwareDownloading(true);
+    appendLog('Downloading firmware binary...');
+    try {
+      const result = await firmwareService.downloadLatestFirmwareBin();
+      setFirmwareBin(result.data);
+      appendLog(
+        `Firmware downloaded: v${result.version}, ${result.data.byteLength} bytes, sha256=${result.checksum.substring(0, 16)}...`
+      );
+      toast.success(`Firmware v${result.version} downloaded (${(result.data.byteLength / 1024).toFixed(1)} KB)`);
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : 'Download failed';
+      appendLog(`Firmware download error: ${message}`);
+      toast.error('Failed to download firmware binary.');
+    } finally {
+      setFirmwareDownloading(false);
+    }
+  };
+
+  // --- Flash firmware via Web Serial ---
+  const handleFlash = async () => {
+    if (!serialPort) {
+      toast.error('No serial port connected. Go back to Step 1.');
+      return;
+    }
+
+    // Download firmware if not already cached
+    let bin = firmwareBin;
+    if (!bin) {
+      setFirmwareDownloading(true);
+      appendLog('Downloading firmware binary before flashing...');
+      try {
+        const result = await firmwareService.downloadLatestFirmwareBin();
+        bin = result.data;
+        setFirmwareBin(bin);
+        appendLog(`Firmware downloaded: ${bin.byteLength} bytes`);
+      } catch {
+        toast.error('Failed to download firmware. Cannot flash.');
+        setFirmwareDownloading(false);
+        return;
+      } finally {
+        setFirmwareDownloading(false);
+      }
+    }
+
+    setFlashError(null);
+    setFlashStage('connecting');
+    setFlashProgress(0);
+    appendLog('Starting flash process...');
+
+    try {
+      // NOTE: esptool-js is not yet in package.json.
+      // When installed, replace this block with:
+      //
+      //   import { ESPLoader, Transport } from 'esptool-js';
+      //   const transport = new Transport(serialPort);
+      //   const loader = new ESPLoader({ transport, baudrate: 460800 });
+      //   await loader.main();
+      //   await loader.flashData(bin, 0x10000, (pct) => {
+      //     setFlashProgress(Math.round(pct));
+      //     setFlashStage('flashing');
+      //   });
+      //
+      // For now we simulate the flash process to validate the UI flow.
+
+      // Check if esptool-js is available
+      let esptoolAvailable = false;
+      try {
+        // Dynamic import to avoid build errors when package is not installed
+        await import('esptool-js');
+        esptoolAvailable = true;
+      } catch {
+        esptoolAvailable = false;
+      }
+
+      if (esptoolAvailable) {
+        // Real esptool-js flashing
+        const { ESPLoader, Transport } = await import('esptool-js');
+
+        appendLog('Initializing esptool transport...');
+        setFlashStage('connecting');
+        setFlashProgress(5);
+
+        const transport = new Transport(serialPort as any);
+        const loader = new ESPLoader({
+          transport,
+          baudrate: 460800,
+          romBaudrate: 115200,
+        });
+
+        appendLog('Connecting to ESP32 bootloader...');
+        await loader.main();
+        appendLog(`Connected. Chip: ${loader.chipName}, MAC: ${loader.macAddr()}`);
+        setFlashProgress(10);
+
+        // Auto-fill MAC address if empty
+        const detectedMac = loader.macAddr();
+        if (detectedMac && !macAddress) {
+          setMacAddress(detectedMac.toUpperCase());
+          appendLog(`Auto-detected MAC: ${detectedMac.toUpperCase()}`);
+        }
+
+        appendLog('Erasing flash...');
+        setFlashStage('erasing');
+        setFlashProgress(15);
+
+        // Flash the firmware binary at the standard app partition offset (0x10000)
+        appendLog('Writing firmware to flash at 0x10000...');
+        setFlashStage('flashing');
+
+        const binArray = new Uint8Array(bin);
+        const fileArray = [{ data: binArray, address: 0x10000 }];
+
+        await loader.writeFlash({
+          fileArray,
+          flashSize: 'keep',
+          flashMode: 'keep',
+          flashFreq: 'keep',
+          eraseAll: false,
+          compress: true,
+          reportProgress: (_fileIndex: number, written: number, total: number) => {
+            const pct = Math.round(15 + (written / total) * 80);
+            setFlashProgress(pct);
+            appendLog(`Flashing: ${written}/${total} bytes (${pct}%)`);
+          },
+        });
+
+        appendLog('Verifying...');
+        setFlashStage('verifying');
+        setFlashProgress(97);
+
+        // Hard reset the device
+        await transport.setDTR(false);
+        await new Promise((r) => setTimeout(r, 100));
+        await transport.setDTR(true);
+
+        appendLog('Flash complete. Device reset.');
+        setFlashStage('done');
+        setFlashProgress(100);
+        setFlashComplete(true);
+        toast.success('Firmware flashed successfully!');
+
+        // Disconnect transport (not the serial port)
+        await transport.disconnect();
+      } else {
+        // Simulated flash (esptool-js not installed)
+        appendLog('esptool-js not installed. Running simulated flash for UI validation.');
+        appendLog('To enable real flashing, run: npm install esptool-js');
+
+        setFlashStage('connecting');
+        setFlashProgress(5);
+        await new Promise((r) => setTimeout(r, 400));
+
+        setFlashStage('erasing');
+        setFlashProgress(15);
+        appendLog('Simulated: Erasing flash...');
+        await new Promise((r) => setTimeout(r, 600));
+
+        setFlashStage('flashing');
+        const totalBytes = bin.byteLength;
+        const chunkSize = Math.ceil(totalBytes / 20);
+        for (let i = 0; i < 20; i++) {
+          const written = Math.min((i + 1) * chunkSize, totalBytes);
+          const pct = Math.round(15 + (written / totalBytes) * 80);
+          setFlashProgress(pct);
+          appendLog(`Simulated: ${written}/${totalBytes} bytes (${pct}%)`);
+          await new Promise((r) => setTimeout(r, 150));
+        }
+
+        setFlashStage('verifying');
+        setFlashProgress(97);
+        appendLog('Simulated: Verifying...');
+        await new Promise((r) => setTimeout(r, 400));
+
+        setFlashStage('done');
+        setFlashProgress(100);
+        setFlashComplete(true);
+        appendLog('Simulated flash complete.');
+        toast.success('Simulated flash complete. Install esptool-js for real flashing.');
+      }
+
+      setTimeout(() => goNext(), 800);
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : 'Flash failed';
+      setFlashStage('error');
+      setFlashError(message);
+      appendLog(`Flash error: ${message}`);
+      toast.error(`Flash failed: ${message}`);
+    }
   };
 
   // Register device via API
@@ -184,11 +488,33 @@ export const FlashDevice: React.FC = () => {
   };
 
   const formatMacAddress = (value: string): string => {
-    // Auto-format as user types: add colons
     const clean = value.replace(/[^0-9A-Fa-f]/g, '').toUpperCase();
     const parts = clean.match(/.{1,2}/g);
     return parts ? parts.join(':').substring(0, 17) : clean;
   };
+
+  // Flash stage label
+  const getFlashStageLabel = (stage: FlashStage): string => {
+    switch (stage) {
+      case 'idle': return 'Ready';
+      case 'connecting': return 'Connecting to bootloader...';
+      case 'erasing': return 'Erasing flash...';
+      case 'flashing': return 'Writing firmware...';
+      case 'verifying': return 'Verifying...';
+      case 'done': return 'Flash complete!';
+      case 'error': return 'Flash failed';
+      default: return '';
+    }
+  };
+
+  // Cleanup serial port on unmount
+  useEffect(() => {
+    return () => {
+      if (serialPort) {
+        serialPort.close().catch(() => {});
+      }
+    };
+  }, [serialPort]);
 
   return (
     <div ref={pageRef} className="space-y-6">
@@ -203,6 +529,20 @@ export const FlashDevice: React.FC = () => {
         </p>
       </div>
 
+      {/* Web Serial Support Warning */}
+      {!serialSupported && (
+        <div className="flex items-start gap-3 p-4 bg-amber-500/10 border border-amber-500/20 rounded-2xl">
+          <WifiOff className="w-5 h-5 text-amber-500 flex-shrink-0 mt-0.5" />
+          <div>
+            <p className="text-sm font-medium text-amber-400">Web Serial not supported</p>
+            <p className="text-xs text-iot-muted mt-1">
+              Your browser does not support the Web Serial API. Use Google Chrome or Microsoft Edge
+              to connect to ESP32 devices via USB. You can still skip to Step 3 and register devices manually.
+            </p>
+          </div>
+        </div>
+      )}
+
       {/* Step Progress Bar */}
       <div className="bg-iot-secondary rounded-2xl border border-iot-subtle p-4">
         <div className="flex items-center justify-between">
@@ -216,7 +556,6 @@ export const FlashDevice: React.FC = () => {
               <React.Fragment key={step.key}>
                 <button
                   onClick={() => {
-                    // Allow going back to completed steps or current
                     if (index <= currentStepIndex || provisioned) {
                       goToStep(step.key);
                     }
@@ -289,18 +628,59 @@ export const FlashDevice: React.FC = () => {
                 <Usb className="w-8 h-8 text-iot-cyan" />
               </div>
               <div>
-                <p className="text-sm font-medium text-iot-primary">Web Serial Connection</p>
+                <p className="text-sm font-medium text-iot-primary">
+                  {serialConnected ? 'Device Connected' : 'Web Serial Connection'}
+                </p>
                 <p className="text-xs text-iot-muted mt-1">
-                  Requires Chrome/Edge browser with Web Serial API support
+                  {serialSupported
+                    ? 'Click below to select your ESP32 USB port'
+                    : 'Web Serial requires Chrome or Edge browser'}
                 </p>
               </div>
-              <Button
-                onClick={handleSerialConnect}
-                className="gradient-primary text-iot-bg-primary"
-              >
-                <Usb className="w-4 h-4 mr-2" />
-                {serialConnected ? 'Connected' : 'Connect via USB'}
-              </Button>
+
+              {serialConnected ? (
+                <div className="space-y-3">
+                  <div className="flex items-center justify-center gap-2 text-emerald-500">
+                    <CheckCircle className="w-5 h-5" />
+                    <span className="text-sm font-medium">Connected</span>
+                  </div>
+                  <div className="flex gap-2 justify-center">
+                    <Button
+                      variant="ghost"
+                      onClick={handleSerialDisconnect}
+                      className="text-iot-muted hover:text-iot-red text-xs"
+                    >
+                      Disconnect
+                    </Button>
+                    <Button
+                      onClick={goNext}
+                      className="gradient-primary text-iot-bg-primary"
+                    >
+                      Next: Flash Firmware
+                      <ChevronRight className="w-4 h-4 ml-1" />
+                    </Button>
+                  </div>
+                </div>
+              ) : (
+                <Button
+                  onClick={handleSerialConnect}
+                  disabled={!serialSupported || serialConnecting}
+                  className="gradient-primary text-iot-bg-primary"
+                >
+                  {serialConnecting ? (
+                    <>
+                      <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                      Connecting...
+                    </>
+                  ) : (
+                    <>
+                      <Usb className="w-4 h-4 mr-2" />
+                      Connect via USB
+                    </>
+                  )}
+                </Button>
+              )}
+
               <p className="text-xs text-iot-muted">
                 Or skip to Step 3 to manually enter device information
               </p>
@@ -313,6 +693,20 @@ export const FlashDevice: React.FC = () => {
                 <ChevronRight className="w-3 h-3 ml-1" />
               </Button>
             </div>
+
+            {/* Serial Log */}
+            {serialLog.length > 0 && (
+              <div className="bg-iot-tertiary rounded-xl p-4">
+                <p className="text-xs font-medium uppercase tracking-wider text-iot-secondary mb-2">
+                  Serial Log
+                </p>
+                <div className="bg-black/30 rounded-lg p-3 max-h-32 overflow-y-auto font-mono text-[11px] text-iot-muted space-y-0.5">
+                  {serialLog.map((line, i) => (
+                    <div key={i}>{line}</div>
+                  ))}
+                </div>
+              </div>
+            )}
           </div>
         )}
 
@@ -355,6 +749,15 @@ export const FlashDevice: React.FC = () => {
                   {latestFirmware.releaseNotes && (
                     <p className="text-xs text-iot-muted">{latestFirmware.releaseNotes}</p>
                   )}
+                  <div className="flex items-center gap-3 text-xs text-iot-muted">
+                    <span>{(latestFirmware.fileSize / 1024).toFixed(1)} KB</span>
+                    {firmwareBin && (
+                      <span className="text-emerald-500 flex items-center gap-1">
+                        <CheckCircle className="w-3 h-3" />
+                        Binary cached
+                      </span>
+                    )}
+                  </div>
                 </div>
               ) : (
                 <p className="text-xs text-iot-muted">
@@ -363,17 +766,56 @@ export const FlashDevice: React.FC = () => {
               )}
             </div>
 
+            {/* Download firmware binary button */}
+            {latestFirmware && !firmwareBin && (
+              <Button
+                onClick={handleDownloadFirmware}
+                disabled={firmwareDownloading}
+                variant="ghost"
+                className="w-full border border-iot-subtle text-iot-secondary hover:text-iot-primary"
+              >
+                {firmwareDownloading ? (
+                  <>
+                    <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                    Downloading binary...
+                  </>
+                ) : (
+                  <>
+                    <Download className="w-4 h-4 mr-2" />
+                    Pre-download Firmware Binary
+                  </>
+                )}
+              </Button>
+            )}
+
             {/* Flash controls */}
             <div className="bg-iot-tertiary rounded-xl p-6 text-center space-y-4">
-              {flashProgress > 0 && (
+              {/* Progress bar */}
+              {flashStage !== 'idle' && (
                 <div className="space-y-2">
                   <div className="w-full bg-iot-subtle rounded-full h-2 overflow-hidden">
                     <div
-                      className="h-full bg-gradient-to-r from-iot-cyan to-iot-purple rounded-full transition-all duration-300"
+                      className={`h-full rounded-full transition-all duration-300 ${
+                        flashStage === 'error'
+                          ? 'bg-red-500'
+                          : flashStage === 'done'
+                          ? 'bg-emerald-500'
+                          : 'bg-gradient-to-r from-iot-cyan to-iot-purple'
+                      }`}
                       style={{ width: `${flashProgress}%` }}
                     />
                   </div>
-                  <p className="text-xs text-iot-muted">{flashProgress}%</p>
+                  <p className={`text-xs ${flashStage === 'error' ? 'text-red-400' : 'text-iot-muted'}`}>
+                    {getFlashStageLabel(flashStage)} {flashStage !== 'done' && flashStage !== 'error' && `${flashProgress}%`}
+                  </p>
+                </div>
+              )}
+
+              {/* Error display */}
+              {flashError && (
+                <div className="flex items-start gap-2 p-3 bg-red-500/10 border border-red-500/20 rounded-lg text-left">
+                  <AlertCircle className="w-4 h-4 text-red-400 flex-shrink-0 mt-0.5" />
+                  <p className="text-xs text-red-400">{flashError}</p>
                 </div>
               )}
 
@@ -385,18 +827,50 @@ export const FlashDevice: React.FC = () => {
               ) : (
                 <Button
                   onClick={handleFlash}
-                  disabled={!latestFirmware}
+                  disabled={
+                    !latestFirmware ||
+                    flashStage === 'connecting' ||
+                    flashStage === 'erasing' ||
+                    flashStage === 'flashing' ||
+                    flashStage === 'verifying'
+                  }
                   className="gradient-primary text-iot-bg-primary"
                 >
-                  <Zap className="w-4 h-4 mr-2" />
-                  Flash Firmware
+                  {flashStage !== 'idle' && flashStage !== 'error' ? (
+                    <>
+                      <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                      Flashing...
+                    </>
+                  ) : (
+                    <>
+                      <Zap className="w-4 h-4 mr-2" />
+                      {!serialConnected ? 'Flash Firmware (Simulated)' : 'Flash Firmware'}
+                    </>
+                  )}
                 </Button>
               )}
 
-              <p className="text-xs text-iot-muted">
-                Web Serial flashing is a placeholder. Use esptool.py for now.
-              </p>
+              {!serialConnected && (
+                <p className="text-xs text-amber-400">
+                  No serial port connected. Flash will run in simulation mode.
+                  {!serialSupported && ' Install Chrome or Edge for real flashing.'}
+                </p>
+              )}
             </div>
+
+            {/* Serial Log */}
+            {serialLog.length > 0 && (
+              <div className="bg-iot-tertiary rounded-xl p-4">
+                <p className="text-xs font-medium uppercase tracking-wider text-iot-secondary mb-2">
+                  Flash Log
+                </p>
+                <div className="bg-black/30 rounded-lg p-3 max-h-40 overflow-y-auto font-mono text-[11px] text-iot-muted space-y-0.5">
+                  {serialLog.map((line, i) => (
+                    <div key={i}>{line}</div>
+                  ))}
+                </div>
+              </div>
+            )}
 
             {/* Navigation */}
             <div className="flex justify-between pt-2">
@@ -420,7 +894,9 @@ export const FlashDevice: React.FC = () => {
               <h3 className="text-lg font-semibold text-iot-primary">Device Information</h3>
             </div>
             <p className="text-sm text-iot-secondary">
-              Enter the MAC address and a name for this device.
+              {macAddress
+                ? 'MAC address was auto-detected. Verify and enter a device name.'
+                : 'Enter the MAC address and a name for this device.'}
             </p>
 
             <div className="space-y-4">
@@ -612,9 +1088,14 @@ export const FlashDevice: React.FC = () => {
                   setDeviceName('');
                   setProvisioned(null);
                   setSerialConnected(false);
+                  setSerialPort(null);
                   setFlashProgress(0);
                   setFlashComplete(false);
+                  setFlashStage('idle');
+                  setFlashError(null);
                   setRegisterError(null);
+                  setSerialLog([]);
+                  setFirmwareBin(null);
                 }}
                 className="text-iot-cyan"
               >

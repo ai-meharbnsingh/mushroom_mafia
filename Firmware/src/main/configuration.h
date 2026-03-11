@@ -21,6 +21,23 @@
 #include <esp_ota_ops.h>                 // ESP-IDF OTA partition operations (dual-partition rollback)
 #include <WiFiClientSecure.h>
 #include <time.h>
+#include <esp_task_wdt.h>                // Hardware watchdog timer (Risk 2)
+
+// ─── Build Flags ──────────────────────────────────────────────────────
+// Uncomment to enable debug-only features (hardcoded keys, etc.)
+// #define DEBUG_MODE
+
+// Deep sleep: disabled by default (mains-powered devices).
+// Uncomment to enable deep sleep after N minutes of no sensor changes.
+// #define ENABLE_DEEP_SLEEP
+
+// ─── Watchdog Configuration (Risk 2) ─────────────────────────────────
+#define WDT_TIMEOUT_SECONDS 30           // Hardware watchdog timeout
+
+// ─── EEPROM Config Version (Risk 5) ─────────────────────────────────
+// Increment this when EEPROM layout changes to auto-reset stale data.
+#define CONFIG_VERSION 3  // Bumped: fixed version stamp order, clears stale MQTT/API from EEPROM
+#define ADDR_CONFIG_VERSION 274           // 1 byte for config version
 
 int row = 0;
 int column = 0;
@@ -95,8 +112,16 @@ bool portalActive = false;     // true when captive portal is running
 bool deviceDisabled = false;   // Kill-switch state (set via MQTT control topic)
 char mqttHost[65];             // MQTT broker host from provisioning (overrides mqttBrokerHost)
 
-// Backend API Configuration
-const char* apiBaseURL = "https://protective-enjoyment-production-2320.up.railway.app/api/v1";
+// ─── Bootstrap Configuration ─────────────────────────────────────
+// The ONLY hardcoded URL. Device contacts this to get all other config.
+// For local dev: change to "http://192.168.29.236:3800/api/v1"
+// For production: "https://protective-enjoyment-production-2320.up.railway.app/api/v1"
+const char* BOOTSTRAP_URL = "https://protective-enjoyment-production-2320.up.railway.app/api/v1";
+
+// Runtime API base URL — loaded from EEPROM after first provisioning
+// Falls back to BOOTSTRAP_URL if EEPROM is empty
+char apiBaseURL[128];  // Mutable, populated from EEPROM or BOOTSTRAP_URL
+
 const char* readingsEndpoint = "/device/readings";
 const char* heartbeatEndpoint = "/device/heartbeat";
 const char* commandsEndpoint = "/device/";  // + deviceId + "/commands"
@@ -131,6 +156,8 @@ const char* provisionEndpoint = "/device/provision/";  // + license_key
 // 175     1   WiFi provisioned flag (0=not provisioned, 1=provisioned, 255=uninitialized)
 // 176    33   WiFi SSID (1 byte length + up to 32 chars)
 // 209    65   WiFi Password (1 byte length + up to 64 chars)
+// 274     1   Config version (Risk 5: mismatch detection)
+// 275   100   API base URL (1 byte length + up to 99 chars) — 2-stage boot
 // ─────────────────────────────────────────────────────────────────
 
 #define ADDR_CO2_RELAY_STATUS 0
@@ -156,6 +183,9 @@ const char* provisionEndpoint = "/device/provision/";  // + license_key
 #define ADDR_WIFI_PROVISIONED 175  // 1 byte: 0=not provisioned, 1=provisioned, 255=uninitialized
 #define ADDR_WIFI_SSID 176         // 1 byte length + up to 32 chars
 #define ADDR_WIFI_PASSWORD 209     // 1 byte length + up to 64 chars
+
+// API base URL in EEPROM (2-stage boot: bootstrap → runtime)
+#define ADDR_API_BASE_URL 275      // 100 bytes: 1 byte length + up to 99 chars
 
 #define EEPROM_MEMORY_SIZE 512
 
@@ -192,15 +222,31 @@ unsigned long lastTimeAuthentication = 0;
 unsigned long menuDisplayDelay = 120000;   // menuy timer 2 minutes
 unsigned long lastMillis = 0;             // stores current time of http req
 unsigned long lastWifiReconnectAttempt = 0;  // WiFi reconnect backoff tracker
+unsigned long wifiBackoffInterval = 10000;  // WiFi reconnect backoff — starts 10s, doubles up to 5 min (Risk 1)
+int wifiConsecutiveFailures = 0;            // Track consecutive WiFi reconnect failures (Risk 1)
 unsigned long timerDelay = 30000;  // 30 seconds (was 300000 = 5 minutes)
+bool ntpSynced = false;                     // NTP sync status (Risk 3)
 
 int deviceId = -1;  // Set after registration, stored in EEPROM
 
 bool eepromDirty = false;
+extern bool eepromInitialized;  // Defined in eepromConfig.ino
+void eepromInit();              // Forward declaration for eepromConfig.ino
+void saveApiBaseUrl(const char* url);  // Forward declaration for eepromConfig.ino
 const char* ntpServer = "pool.ntp.org";
 const long gmtOffset_sec = 19800;
 const int daylightOffset_sec = 0;
 #define HEAP_WARNING_THRESHOLD 20000
+
+// ─── Deep Sleep Configuration (Risk 4) ───────────────────────────────
+#ifdef ENABLE_DEEP_SLEEP
+#define DEEP_SLEEP_IDLE_MINUTES 0         // 0 = disabled. Set to N to sleep after N min of no change.
+#define DEEP_SLEEP_WAKE_INTERVAL_US (5 * 60 * 1000000ULL)  // Wake every 5 minutes to read sensors
+float lastCO2ForSleep = 0;
+float lastTempForSleep = 0;
+float lastHumForSleep = 0;
+unsigned long lastSensorChangeTime = 0;   // millis() of last significant sensor change
+#endif
 
 // Template function — declared in header to avoid PlatformIO prototype generation issues
 template <typename T>

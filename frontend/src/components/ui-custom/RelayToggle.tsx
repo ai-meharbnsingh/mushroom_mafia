@@ -36,7 +36,7 @@ const modeColors: Record<RelayMode, { bg: string; text: string; border: string; 
 };
 
 export const RelayToggle: React.FC<RelayToggleProps> = ({
-  relay,
+  relay: _relay,
   label,
   isOn,
   mode,

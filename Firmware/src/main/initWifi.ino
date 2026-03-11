@@ -1,28 +1,60 @@
 bool serverStarted = false;
 
-// Non-blocking WiFi reconnect — used in main loop, does NOT reboot on failure
+// ─── Risk 1 Fix: Non-blocking WiFi reconnect with exponential backoff ───
+// Does NOT block the main loop. Returns immediately after issuing reconnect.
+// Caller checks WiFi.status() on next loop iteration.
+// Backoff doubles from 10s to max 5 min. After 10 consecutive failures,
+// restarts the WiFi stack entirely.
 bool reconnectWiFi() {
     lcd.setCursor(0, 0);
     lcd.print("WiFi Reconnecting...");
-    Serial.println("WiFi reconnecting (non-blocking)...");
+    Serial.printf("WiFi reconnect (non-blocking, backoff=%lums, fails=%d)\n",
+                  wifiBackoffInterval, wifiConsecutiveFailures);
+
+    // After 10 consecutive failures: restart the WiFi stack entirely
+    if (wifiConsecutiveFailures >= 10) {
+        Serial.println("WiFi: 10 consecutive failures — restarting WiFi stack");
+        WiFi.disconnect(true);
+        delay(1000);
+        WiFi.mode(WIFI_STA);
+        WiFi.persistent(false);
+        WiFi.setTxPower(WIFI_POWER_19_5dBm);
+        // Re-read credentials from EEPROM for a fresh connection
+        char ssid[33] = {0};
+        char pass[65] = {0};
+        if (readWiFiCredentials(ssid, pass)) {
+            WiFi.begin(ssid, pass);
+        } else {
+            WiFi.reconnect();
+        }
+        wifiConsecutiveFailures = 0;
+        wifiBackoffInterval = 10000;  // Reset backoff
+        return false;  // Will check on next loop
+    }
 
     WiFi.reconnect();  // ESP32 remembers last SSID/password
 
+    // Brief non-blocking check (2 seconds max — NOT 30 seconds)
     unsigned long startAttemptTime = millis();
-    while (WiFi.status() != WL_CONNECTED && millis() - startAttemptTime < 30000) {
-        delay(500);
-        Serial.print(".");
+    while (WiFi.status() != WL_CONNECTED && millis() - startAttemptTime < 2000) {
+        delay(100);
     }
 
     if (WiFi.status() == WL_CONNECTED) {
-        Serial.println("\nWiFi reconnected! IP: " + WiFi.localIP().toString());
+        Serial.println("WiFi reconnected! IP: " + WiFi.localIP().toString());
         lcd.setCursor(0, 0);
         lcd.print("WiFi: RECONNECTED   ");
         setupServer();  // Ensure web server is running
+        // Reset backoff on success
+        wifiConsecutiveFailures = 0;
+        wifiBackoffInterval = 10000;
         return true;
     }
 
-    Serial.println("\nWiFi reconnect failed.");
+    // Exponential backoff: double interval up to 5 minutes (300000ms)
+    wifiConsecutiveFailures++;
+    wifiBackoffInterval = min(wifiBackoffInterval * 2, (unsigned long)300000);
+    Serial.printf("WiFi reconnect failed. Next attempt in %lums\n", wifiBackoffInterval);
     lcd.setCursor(0, 0);
     lcd.print("WiFi: DOWN          ");
     return false;
@@ -105,6 +137,7 @@ bool connectToWiFi(const char* ssid, const char* pass) {
     unsigned long startAttemptTime = millis();
     // Try for 30 seconds per attempt
     while (WiFi.status() != WL_CONNECTED && millis() - startAttemptTime < 30000) {
+      esp_task_wdt_reset();  // Risk 2: Feed watchdog during WiFi connection attempts
       delay(500);
       Serial.print(".");
       lcd.setCursor(0, 1);

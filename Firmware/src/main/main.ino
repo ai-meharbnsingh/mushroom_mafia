@@ -10,14 +10,36 @@ void setup() {
     delay(1000);
     Serial.println("\n\n=== SYSTEM BOOTING ===");
 
+    // ─── Risk 4: Log deep sleep wake reason ──────────────────────────
+#ifdef ENABLE_DEEP_SLEEP
+    esp_sleep_wakeup_cause_t wakeReason = esp_sleep_get_wakeup_cause();
+    switch (wakeReason) {
+        case ESP_SLEEP_WAKEUP_TIMER:
+            Serial.println("Wake: timer (deep sleep cycle)");
+            break;
+        case ESP_SLEEP_WAKEUP_EXT0:
+        case ESP_SLEEP_WAKEUP_EXT1:
+            Serial.println("Wake: external signal");
+            break;
+        default:
+            Serial.println("Wake: normal boot / reset");
+            break;
+    }
+#endif
+
     // Initialize I2C first
-    Wire.begin(21, 22); 
-    
+    Wire.begin(21, 22);
+
     lcd.begin(); // standard init for this library
     lcd.backlight();
     lcd.clear();
     lcd.print("SYSTEM STARTING...");
     delay(1000);
+
+    // ─── Risk 2: Initialize hardware watchdog timer ─────────────────
+    esp_task_wdt_init(WDT_TIMEOUT_SECONDS, true);  // true = panic (reboot) on timeout
+    esp_task_wdt_add(NULL);                          // Add current (loop) task to watchdog
+    Serial.printf("Watchdog: %ds timeout enabled\n", WDT_TIMEOUT_SECONDS);
 
     // Initialize NVS
     esp_err_t ret = nvs_flash_init();
@@ -29,33 +51,117 @@ void setup() {
     // (must happen before initWiFi so we can read SSID/password or start portal)
     eepromInit();
 
+    // ─── Risk 5: Config version mismatch detection ──────────────────
+    // Must run BEFORE runtime config log so we see the corrected values
+    uint8_t storedVersion = EEPROM.read(ADDR_CONFIG_VERSION);
+    if (storedVersion != CONFIG_VERSION) {
+        Serial.printf("Config version mismatch: stored=%d, firmware=%d — resetting EEPROM to defaults\n",
+                      storedVersion, CONFIG_VERSION);
+        lcd.clear();
+        lcd.print("Config Reset...");
+        // Preserve WiFi credentials and license key across config resets
+        char savedSSID[33] = {0};
+        char savedPass[65] = {0};
+        bool hadWiFi = readWiFiCredentials(savedSSID, savedPass);
+        char savedLicenseKey[20] = {0};
+        strncpy(savedLicenseKey, licenseKey, 19);
+        uint8_t savedKeyFlag = EEPROM.read(ADDR_KEY_FLAG);
+
+        // Clear ALL EEPROM (wipes stale MQTT host, API URL, provisioning flags)
+        for (int i = 0; i < EEPROM_MEMORY_SIZE; i++) {
+            EEPROM.write(i, 255);
+        }
+
+        // Write new config version
+        EEPROM.write(ADDR_CONFIG_VERSION, CONFIG_VERSION);
+
+        // Restore WiFi credentials
+        if (hadWiFi) {
+            saveWiFiCredentials(savedSSID, savedPass);
+        }
+
+        // Restore license key if it was valid
+        if (savedKeyFlag != 255 && strlen(savedLicenseKey) >= 4) {
+            writeStringToEEPROM(ADDR_KEY_FLAG, savedLicenseKey);
+        }
+
+        // Write default threshold values
+        writeToEeprom<uint16_t>(ADDR_MIN_VAL_CO2, CO2MinValue);
+        writeToEeprom<float>(ADDR_MIN_VAL_HUM, humidityMin);
+        writeToEeprom<float>(ADDR_MIN_VAL_TEMP, tempMinValue);
+
+        EEPROM.commit();
+        Serial.println("EEPROM reset complete — MQTT/API cleared, will use defaults");
+        delay(1000);
+        // Re-read EEPROM to load fresh defaults (MQTT provisioned=false, API URL=bootstrap)
+        eepromInitialized = false;
+        eepromInit();
+    } else {
+        // Version matches — stamp for first-time devices (255 → CONFIG_VERSION)
+        // No-op if already stamped
+    }
+
+    // ─── 2-Stage Boot: Log runtime config AFTER config version check ──
+    Serial.println("=== RUNTIME CONFIG ===");
+    Serial.print("API URL: "); Serial.println(apiBaseURL);
+    Serial.print("MQTT Host: "); Serial.println(mqttHost[0] ? mqttHost : mqttBrokerHost);
+    Serial.print("MQTT Port: "); Serial.println(mqttBrokerPort);
+    Serial.print("MQTT Provisioned: "); Serial.println(mqttProvisioned ? "YES" : "NO (HTTP bootstrap)");
+    Serial.print("Config source: "); Serial.println(EEPROM.read(ADDR_API_BASE_URL) != 255 ? "EEPROM (provisioned)" : "BOOTSTRAP (default)");
+    Serial.println("=====================");
+
     // Setup Mode check: if EEPROM is blank or key is too short, enter USB provisioning
     if (EEPROM.read(ADDR_KEY_FLAG) == 255 || strlen(licenseKey) < 4) {
         enterSetupMode();
     }
 
-    // Set up the WiFi connection (reads credentials from EEPROM or starts captive portal)
+    // ─── Risk 3: Sequential initialization with proper ordering ─────
+    // Step 1: WiFi MUST connect before anything network-related
+    esp_task_wdt_reset();  // Feed watchdog before WiFi (can take 30s+)
     initWiFi();
 
-    // NTP time sync (needed for TLS certificate validation)
-    configTime(gmtOffset_sec, daylightOffset_sec, ntpServer);
-    Serial.print("NTP sync...");
-    struct tm timeinfo;
-    if (getLocalTime(&timeinfo, 10000)) {
-        Serial.println(&timeinfo, " %Y-%m-%d %H:%M:%S IST");
+    // Step 2: NTP sync MUST succeed before sending telemetry
+    // (timestamps must be valid for TLS and data integrity)
+    if (WiFi.status() == WL_CONNECTED) {
+        configTime(gmtOffset_sec, daylightOffset_sec, ntpServer);
+        Serial.print("NTP sync...");
+        struct tm timeinfo;
+        int ntpRetries = 0;
+        while (!getLocalTime(&timeinfo, 5000) && ntpRetries < 3) {
+            ntpRetries++;
+            Serial.printf(" retry %d/3...", ntpRetries);
+            esp_task_wdt_reset();  // Feed watchdog during NTP retries
+            delay(1000);
+        }
+        if (getLocalTime(&timeinfo, 5000)) {
+            Serial.println(&timeinfo, " %Y-%m-%d %H:%M:%S IST");
+            ntpSynced = true;
+        } else {
+            Serial.println(" NTP failed after 3 retries (timestamps may be invalid)");
+            ntpSynced = false;
+        }
     } else {
-        Serial.println(" failed (will retry)");
+        Serial.println("WiFi not connected — skipping NTP sync");
+        ntpSynced = false;
     }
 
-    // Initialize the connected devices (sensors, relays, auth)
+    esp_task_wdt_reset();  // Feed watchdog before device init
+
+    // Step 3: Initialize the connected devices (sensors, relays, auth)
     // Note: eepromInit() already called above, initializeDevices() will skip it
     initializeDevices();
 
-    // Two-stage boot: if MQTT provisioned, set up MQTT connection
+    // Step 4: MQTT connection (only if WiFi is up and provisioned)
     if (mqttProvisioned) {
-        Serial.println("=== MQTT RUNTIME MODE ===");
-        setupMQTT();
-        connectMQTT();
+        if (WiFi.status() == WL_CONNECTED) {
+            Serial.println("=== MQTT RUNTIME MODE ===");
+            esp_task_wdt_reset();  // Feed watchdog before MQTT (TLS handshake can be slow)
+            setupMQTT();
+            connectMQTT();
+        } else {
+            Serial.println("=== MQTT MODE (WiFi down — will connect later) ===");
+            setupMQTT();  // Configure but don't connect yet
+        }
     } else {
         Serial.println("=== HTTP BOOTSTRAP MODE ===");
     }
@@ -74,12 +180,17 @@ void setup() {
     Serial.printf("Firmware version: %s\n", FIRMWARE_VERSION);
     Serial.printf("Running partition: %s\n", running->label);
 
+    esp_task_wdt_reset();  // Feed watchdog before welcome screen (has delays)
+
     // Print the welcome screen
     welcomeScreen();
     lcd.clear();
 }
 
 void loop() {
+    // ─── Risk 2: Feed hardware watchdog every loop iteration ────────
+    esp_task_wdt_reset();
+
     // If the button is pressed, the ISR(interrupt service routine)
     // sets state to high, thus below conditional is called which opens up the menu
     if(state == HIGH)  {
@@ -89,23 +200,31 @@ void loop() {
     }
     unsigned long currentTime = millis();
 
+    // ─── Risk 3: Retry NTP sync if it failed during boot ────────────
+    if (!ntpSynced && WiFi.status() == WL_CONNECTED) {
+        struct tm timeinfo;
+        if (getLocalTime(&timeinfo, 2000)) {
+            ntpSynced = true;
+            Serial.println("NTP: Late sync succeeded");
+        }
+    }
+
     if (mqttProvisioned) {
         // ═══════════════════════════════════════════
         //  MQTT RUNTIME MODE
         // ═══════════════════════════════════════════
 
-        // WiFi resilience: check connection before MQTT operations
+        // ─── Risk 1: Non-blocking WiFi reconnect with exponential backoff ───
         if (WiFi.status() != WL_CONNECTED) {
             lcd.setCursor(0, 3);
             lcd.print("WiFi: DOWN          ");
-            // Backoff: only try reconnect every 10 seconds
-            if (currentTime - lastWifiReconnectAttempt >= 10000) {
+            // Use dynamic backoff interval instead of fixed 10s
+            if (currentTime - lastWifiReconnectAttempt >= wifiBackoffInterval) {
                 lastWifiReconnectAttempt = currentTime;
-                reconnectWiFi();
+                reconnectWiFi();  // Non-blocking (max 2s check)
             }
             if (WiFi.status() != WL_CONNECTED) {
-                // WiFi still down — skip MQTT ops, keep reading sensors locally
-                // Backend controls relays in MQTT mode — no local threshold checking
+                // WiFi still down — sensors keep reading locally (Risk 1: sensors never stop)
                 readBagSensorNew();
                 readFromCO2();
                 readDHTSensor();
@@ -115,6 +234,11 @@ void loop() {
         } else {
             lcd.setCursor(0, 3);
             lcd.print("WiFi: OK            ");
+            // Reset backoff on stable connection
+            if (wifiConsecutiveFailures > 0) {
+                wifiConsecutiveFailures = 0;
+                wifiBackoffInterval = 10000;
+            }
         }
 
         lcd.setCursor(0, 2);
@@ -130,15 +254,18 @@ void loop() {
 
         if (currentTime - lastTime >= timerDelay) {
             // Every 30 seconds: read sensors and publish telemetry via MQTT
-            // Backend controls relays in MQTT mode — no local threshold checking
             readBagSensorNew();
             readFromCO2();
             readDHTSensor();
-            publishTelemetry();
+            // ─── Risk 3: Only publish telemetry if NTP has synced ────────
+            if (ntpSynced) {
+                publishTelemetry();
+            } else {
+                Serial.println("Skipping MQTT publish — NTP not synced (invalid timestamps)");
+            }
             lastTime = currentTime;
         } else {
             // Between intervals: still read sensors locally
-            // Backend controls relays in MQTT mode — no local threshold checking
             readBagSensorNew();
             readFromCO2();
             readDHTSensor();
@@ -151,17 +278,21 @@ void loop() {
         lcd.setCursor(0, 2);
         lcd.print("HTTP Mode           ");
 
-        // WiFi resilience: check connection before HTTP operations
+        // ─── Risk 1: Non-blocking WiFi reconnect with exponential backoff ───
         if (WiFi.status() != WL_CONNECTED) {
           lcd.setCursor(0, 3);
           lcd.print("WiFi: DOWN          ");
-          if (currentTime - lastWifiReconnectAttempt >= 10000) {
+          if (currentTime - lastWifiReconnectAttempt >= wifiBackoffInterval) {
             lastWifiReconnectAttempt = currentTime;
-            reconnectWiFi();
+            reconnectWiFi();  // Non-blocking
           }
         } else {
           lcd.setCursor(0, 3);
           lcd.print("WiFi: OK            ");
+          if (wifiConsecutiveFailures > 0) {
+              wifiConsecutiveFailures = 0;
+              wifiBackoffInterval = 10000;
+          }
         }
 
         // After every 30 minutes: re-authenticate device key + heartbeat
@@ -172,6 +303,7 @@ void loop() {
             lcd.setCursor(0,3);
             lcd.print(" WiFi DISCONNECTED  ");
             delay(2000);
+            esp_task_wdt_reset();  // Feed watchdog before WiFi init
             initWiFi();
           }
           lcd.print("Authenticating Key");
@@ -180,7 +312,7 @@ void loop() {
           if (!authenticateDevKey(licenseKey)) {
             lcd.clear();
             lcd.print("DEVICE KEY INVALID");
-            while(true) {}  // program halt
+            while(true) { esp_task_wdt_reset(); }  // Keep watchdog alive during halt
           }
           sendHeartbeat();  // Send heartbeat during auth cycle
           lcd.clear();
@@ -200,9 +332,14 @@ void loop() {
             lcd.setCursor(0,3);
             lcd.print(" SENDING DATA ONLINE ");
             Serial.println("SENDING HTTP REQUEST");
-            sendHTTPRequest();
+            // ─── Risk 3: Only send HTTP data if NTP has synced ──────────
+            if (ntpSynced) {
+                sendHTTPRequest();
+            } else {
+                Serial.println("Skipping HTTP send — NTP not synced (invalid timestamps)");
+            }
 
-            // Poll for MQTT provisioning credentials
+            // Poll for MQTT provisioning credentials (no timestamp needed)
             pollProvisionEndpoint();
           } else {
             lcd.setCursor(0,3);
@@ -214,6 +351,12 @@ void loop() {
           delay(2000);
         }
     }
+
+    // ─── Risk 4: Deep sleep check ───────────────────────────────────
+#ifdef ENABLE_DEEP_SLEEP
+    checkDeepSleep();
+#endif
+
     if (eepromDirty) {
         EEPROM.commit();
         eepromDirty = false;
@@ -240,6 +383,7 @@ void enterSetupMode() {
     bool ledState = false;
 
     while (true) {
+        esp_task_wdt_reset();  // Risk 2: Feed watchdog in setup mode loop
         if (millis() - lastBlink > 500) {
             ledState = !ledState;
             digitalWrite(2, ledState);
@@ -284,3 +428,56 @@ void enterSetupMode() {
         delay(10);
     }
 }
+
+// ─── Risk 4: Deep Sleep Function ────────────────────────────────────
+// Only compiled when ENABLE_DEEP_SLEEP is defined.
+// Enters deep sleep after DEEP_SLEEP_IDLE_MINUTES of no significant
+// sensor changes. Wakes on timer to take a reading.
+#ifdef ENABLE_DEEP_SLEEP
+void checkDeepSleep() {
+    if (DEEP_SLEEP_IDLE_MINUTES == 0) return;  // Deep sleep disabled
+
+    // Check for significant sensor changes (thresholds: 50ppm CO2, 0.5C temp, 1% humidity)
+    bool sensorChanged = false;
+    if (abs((int)co2 - (int)lastCO2ForSleep) > 50) sensorChanged = true;
+    if (abs(temperature - lastTempForSleep) > 0.5) sensorChanged = true;
+    if (abs(humidity - lastHumForSleep) > 1.0) sensorChanged = true;
+
+    if (sensorChanged) {
+        lastCO2ForSleep = co2;
+        lastTempForSleep = temperature;
+        lastHumForSleep = humidity;
+        lastSensorChangeTime = millis();
+        return;
+    }
+
+    // Initialize lastSensorChangeTime on first run
+    if (lastSensorChangeTime == 0) {
+        lastSensorChangeTime = millis();
+        return;
+    }
+
+    unsigned long idleMinutes = (millis() - lastSensorChangeTime) / 60000;
+    if (idleMinutes >= DEEP_SLEEP_IDLE_MINUTES) {
+        Serial.printf("Deep sleep: %lu min idle (threshold: %d min). Sleeping for %llu us\n",
+                      idleMinutes, DEEP_SLEEP_IDLE_MINUTES, DEEP_SLEEP_WAKE_INTERVAL_US);
+        lcd.clear();
+        lcd.print("DEEP SLEEP...");
+        lcd.setCursor(0, 1);
+        lcd.print("Wake in 5 min");
+        delay(2000);
+
+        // Disconnect cleanly before sleep
+        if (mqttProvisioned && mqttClient.connected()) {
+            String statusTopic = "device/" + String(licenseKey) + "/status";
+            mqttClient.publish(statusTopic.c_str(), "{\"status\":\"sleeping\"}", true);
+            mqttClient.disconnect();
+        }
+        WiFi.disconnect(true);
+
+        esp_sleep_enable_timer_wakeup(DEEP_SLEEP_WAKE_INTERVAL_US);
+        esp_deep_sleep_start();
+        // Device resets after waking — setup() runs again
+    }
+}
+#endif

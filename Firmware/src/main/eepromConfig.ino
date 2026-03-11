@@ -24,8 +24,9 @@ void readFromEeprom() {
   // Supports both legacy 12-char deviceKey and new 18-char licenseKey.
   delay(2000);
   if(EEPROM.read(ADDR_KEY_FLAG) == 255 )  {
-    Serial.println("EEPROM EMPTY — auto-writing dev license key");
-    // Dev mode: auto-write a known license key instead of joystick input
+#ifdef DEBUG_MODE
+    // ─── Risk 6: Hardcoded dev key only available in DEBUG builds ───
+    Serial.println("EEPROM EMPTY — auto-writing dev license key (DEBUG_MODE)");
     char devKey[] = "LIC-877V-4REX-K60T";
     writeStringToEEPROM(ADDR_KEY_FLAG, devKey);
     for (int i = 0; i < 18; i++) { licenseKey[i] = devKey[i]; }
@@ -43,6 +44,11 @@ void readFromEeprom() {
     lcd.print(licenseKey);
     delay(2000);
     return;
+#else
+    // ─── Risk 6: Production — no hardcoded keys. Setup Mode will handle it. ───
+    Serial.println("EEPROM EMPTY — no license key. Device will enter Setup Mode.");
+    return;
+#endif
   }
 
   delay(100);
@@ -121,6 +127,26 @@ void readFromEeprom() {
 
   // Read MQTT provisioning data
   readMQTTCredentials();
+
+  // Read API base URL from EEPROM (2-stage boot pattern)
+  uint8_t apiUrlLen = EEPROM.read(ADDR_API_BASE_URL);
+  if (apiUrlLen > 0 && apiUrlLen < 100 && apiUrlLen != 255) {
+      for (int i = 0; i < apiUrlLen; i++) {
+          apiBaseURL[i] = (char)EEPROM.read(ADDR_API_BASE_URL + 1 + i);
+      }
+      apiBaseURL[apiUrlLen] = '\0';
+      Serial.print("API URL from EEPROM: ");
+      Serial.println(apiBaseURL);
+  } else {
+      // No URL in EEPROM — use bootstrap URL as fallback
+      strncpy(apiBaseURL, BOOTSTRAP_URL, sizeof(apiBaseURL) - 1);
+      apiBaseURL[sizeof(apiBaseURL) - 1] = '\0';
+      Serial.print("API URL (bootstrap fallback): ");
+      Serial.println(apiBaseURL);
+  }
+
+  // Note: Config version check + stamp is handled in main.ino setup()
+  // Do NOT stamp here — main.ino needs to see the mismatch first to trigger EEPROM reset
 }
 
 // ─── WiFi Credential Functions (Captive Portal) ───────────────────────
@@ -256,6 +282,22 @@ void readMQTTCredentials() {
     mqttProvisioned = false;
     Serial.println("MQTT provisioned: NO (HTTP bootstrap mode)");
   }
+}
+
+// ─── API Base URL Functions (2-stage boot) ───────────────────────────
+
+void saveApiBaseUrl(const char* url) {
+    uint8_t len = strlen(url);
+    if (len >= 100) len = 99;  // Safety cap
+    EEPROM.write(ADDR_API_BASE_URL, len);
+    for (int i = 0; i < len; i++) {
+        EEPROM.write(ADDR_API_BASE_URL + 1 + i, url[i]);
+    }
+    EEPROM.commit();
+    strncpy(apiBaseURL, url, sizeof(apiBaseURL) - 1);
+    apiBaseURL[sizeof(apiBaseURL) - 1] = '\0';
+    Serial.print("API URL saved: ");
+    Serial.println(apiBaseURL);
 }
 
 bool eepromInitialized = false;

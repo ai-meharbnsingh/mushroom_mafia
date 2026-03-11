@@ -1,5 +1,6 @@
 from datetime import datetime, timedelta
 
+from fastapi import HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 
@@ -16,20 +17,36 @@ from app.config import settings
 async def authenticate_user(
     db: AsyncSession, username: str, password: str
 ) -> User | None:
-    """Authenticate user by username and password. Handle lockout logic."""
+    """Authenticate user by username and password. Handle lockout logic.
+
+    Lockout auto-expires after LOCKOUT_DURATION_MINUTES (default 15).
+    When expired, attempts are reset and the user can try again.
+    """
     result = await db.execute(select(User).where(User.username == username))
     user = result.scalar_one_or_none()
     if not user:
         return None
 
-    # Check lockout
-    if user.locked_until and user.locked_until > datetime.utcnow():
-        return None
+    # Check lockout — auto-unlock if the lockout period has expired
+    if user.locked_until:
+        if user.locked_until > datetime.utcnow():
+            remaining = int((user.locked_until - datetime.utcnow()).total_seconds() / 60) + 1
+            raise HTTPException(
+                status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+                detail=f"Account temporarily locked due to too many failed attempts. Try again in {remaining} minute(s).",
+            )
+        else:
+            # Lockout period expired — reset attempts and allow login
+            user.login_attempts = 0
+            user.locked_until = None
+            await db.commit()
 
     if not verify_password(password, user.password_hash):
         user.login_attempts = (user.login_attempts or 0) + 1
-        if user.login_attempts >= 5:
-            user.locked_until = datetime.utcnow() + timedelta(minutes=15)
+        if user.login_attempts >= settings.MAX_LOGIN_ATTEMPTS:
+            user.locked_until = datetime.utcnow() + timedelta(
+                minutes=settings.LOCKOUT_DURATION_MINUTES
+            )
         await db.commit()
         return None
 

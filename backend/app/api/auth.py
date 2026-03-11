@@ -31,9 +31,8 @@ async def login(request: LoginRequest, response: Response, db: AsyncSession = De
         )
 
     tokens = create_tokens(user)
-    # TODO: Set secure=True in production (HTTPS). Currently False for local HTTP dev.
-    response.set_cookie(key="access_token", value=tokens["access_token"], httponly=True, samesite="lax", secure=False, max_age=settings.ACCESS_TOKEN_EXPIRE_MINUTES * 60)
-    response.set_cookie(key="refresh_token", value=tokens["refresh_token"], httponly=True, samesite="lax", secure=False, max_age=settings.REFRESH_TOKEN_EXPIRE_DAYS * 24 * 60 * 60)
+    response.set_cookie(key="access_token", value=tokens["access_token"], httponly=True, samesite="lax", secure=settings.cookie_secure, max_age=settings.ACCESS_TOKEN_EXPIRE_MINUTES * 60)
+    response.set_cookie(key="refresh_token", value=tokens["refresh_token"], httponly=True, samesite="lax", secure=settings.cookie_secure, max_age=settings.REFRESH_TOKEN_EXPIRE_DAYS * 24 * 60 * 60)
     return TokenResponse(
         access_token=tokens["access_token"],
         refresh_token=tokens["refresh_token"],
@@ -91,10 +90,9 @@ async def refresh_token(request: Request, response: Response, body: RefreshReque
 
     tokens = create_tokens(user)
     csrf_token = secrets.token_urlsafe(32)
-    # TODO: Set secure=True in production (HTTPS). Currently False for local HTTP dev.
-    response.set_cookie(key="access_token", value=tokens["access_token"], httponly=True, samesite="lax", secure=False, max_age=settings.ACCESS_TOKEN_EXPIRE_MINUTES * 60)
-    response.set_cookie(key="refresh_token", value=tokens["refresh_token"], httponly=True, samesite="lax", secure=False, max_age=settings.REFRESH_TOKEN_EXPIRE_DAYS * 24 * 60 * 60)
-    response.set_cookie(key="csrf_token", value=csrf_token, httponly=False, samesite="lax", secure=False, max_age=settings.ACCESS_TOKEN_EXPIRE_MINUTES * 60)
+    response.set_cookie(key="access_token", value=tokens["access_token"], httponly=True, samesite="lax", secure=settings.cookie_secure, max_age=settings.ACCESS_TOKEN_EXPIRE_MINUTES * 60)
+    response.set_cookie(key="refresh_token", value=tokens["refresh_token"], httponly=True, samesite="lax", secure=settings.cookie_secure, max_age=settings.REFRESH_TOKEN_EXPIRE_DAYS * 24 * 60 * 60)
+    response.set_cookie(key="csrf_token", value=csrf_token, httponly=False, samesite="lax", secure=settings.cookie_secure, max_age=settings.ACCESS_TOKEN_EXPIRE_MINUTES * 60)
     return TokenResponse(
         access_token=tokens["access_token"],
         refresh_token=tokens["refresh_token"],

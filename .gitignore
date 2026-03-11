@@ -1,8 +1,11 @@
 node_modules/
 backend/venv/
 backend/.env
+backend/.env.production
+backend/seed_neon.py
 frontend/.env
 frontend/.env.local
+frontend/.env.production
 __pycache__/
 *.pyc
 .pytest_cache/
@@ -20,3 +23,5 @@ Firmware/test_scd41/.pio/
 .pio/
 tools/qr_codes/
 backend/firmware_files/
+certs/
+*.zip

@@ -84,6 +84,7 @@ class DeviceProvisioningInfo(BaseModel):
     mqtt_host: Optional[str] = None
     mqtt_port: Optional[int] = None
     device_id: Optional[int] = None
+    api_base_url: Optional[str] = None
 
 
 # --- Device Onboarding (QR Scan / Link / Approve) ---

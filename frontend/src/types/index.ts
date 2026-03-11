@@ -387,6 +387,49 @@ export interface OTADeviceStatus {
   lastOtaAt: string | null;
 }
 
+// FirmwareFile Types (in-DB binary storage for Web Serial)
+export interface FirmwareFile {
+  id: number;
+  version: string;
+  filename: string;
+  fileSize: number;
+  checksumSha256: string;
+  boardType: string;
+  uploadNotes: string | null;
+  uploadedAt: string | null;
+  isActive: boolean;
+}
+
+export interface FirmwareFileLatest {
+  version: string;
+  filename: string;
+  fileSize: number;
+  checksumSha256: string;
+  boardType: string;
+  uploadedAt: string | null;
+}
+
+// Flash Progress Types (Web Serial flashing)
+export type FlashStage = 'idle' | 'connecting' | 'erasing' | 'flashing' | 'verifying' | 'done' | 'error';
+
+export interface FlashProgress {
+  stage: FlashStage;
+  percent: number;
+  bytesWritten: number;
+  bytesTotal: number;
+  message: string;
+}
+
+// OTA Rollout Result
+export interface OTARolloutResult {
+  detail: string;
+  firmwareVersion: string;
+  totalDevices: number;
+  success: number;
+  failed: number;
+  downloadUrl: string;
+}
+
 // Harvest Types
 export type HarvestGrade = 'A' | 'B' | 'C';
 export type GrowthStage = 'INOCULATION' | 'SPAWN_RUN' | 'INCUBATION' | 'FRUITING' | 'HARVEST' | 'IDLE';

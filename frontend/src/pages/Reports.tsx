@@ -32,7 +32,7 @@ import { useToast } from '@/hooks/useToast';
 import { useAuth } from '@/hooks/useAuth';
 import { reportService } from '@/services/reportService';
 import { mapReport } from '@/utils/mappers';
-import type { Report, ReportType } from '@/types';
+import type { Report } from '@/types';
 
 // Backend-specific report type values
 const REPORT_TYPE_OPTIONS = [

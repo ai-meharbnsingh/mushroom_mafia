@@ -192,6 +192,15 @@ void pollProvisionEndpoint() {
             return;
         }
 
+        // 2-stage boot: update API base URL from provisioning response (any status)
+        if (doc.containsKey("api_base_url") && !doc["api_base_url"].isNull()) {
+            const char* newApiUrl = doc["api_base_url"];
+            if (strlen(newApiUrl) > 0 && strcmp(newApiUrl, apiBaseURL) != 0) {
+                saveApiBaseUrl(newApiUrl);
+                Serial.println("API URL updated from provisioning server");
+            }
+        }
+
         String status = doc["status"] | "";
         if (status == "ready") {
             const char* mqttPwd = doc["mqtt_password"] | "";
