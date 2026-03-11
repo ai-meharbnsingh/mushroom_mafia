@@ -109,6 +109,26 @@ class FakeRedis:
         # No-op for tests (no real TTL tracking)
         return key in self._store
 
+    async def keys(self, pattern: str = "*") -> list:
+        """Return keys matching pattern (simplified: only supports * and prefix*)."""
+        if pattern == "*":
+            return list(self._store.keys())
+        prefix = pattern.rstrip("*")
+        return [k for k in self._store if k.startswith(prefix)]
+
+    async def exists(self, *keys: str) -> int:
+        return sum(1 for k in keys if k in self._store)
+
+    async def eval(self, script, numkeys, *args):
+        """Return 0 = 'allowed' for FastAPILimiter Lua scripts."""
+        return 0
+
+    async def evalsha(self, sha, numkeys, *args):
+        return 0
+
+    async def script_load(self, script):
+        return "fake-sha"
+
     async def ping(self) -> bool:
         return True
 
@@ -232,7 +252,7 @@ async def seed_owner_plant_room_device(db_session: AsyncSession):
     if existing:
         # Fetch all related objects
         user = (await db_session.execute(
-            select(User).where(User.username == "testowner")
+            select(User).where(User.username == "owneruser")
         )).scalar_one()
         plant = (await db_session.execute(
             select(Plant).where(Plant.plant_code == "TST-001")
@@ -261,14 +281,14 @@ async def seed_owner_plant_room_device(db_session: AsyncSession):
     db_session.add(owner)
     await db_session.flush()
 
-    # User (ADMIN role under this owner)
+    # User (ADMIN role under this owner) — uses "owneruser" to match seed_owner/owner_client
     user = User(
         owner_id=2,
-        username="testowner",
-        email="testowner@test.com",
-        password_hash=hash_password("pass1234"),
-        first_name="Test",
-        last_name="Owner",
+        username="owneruser",
+        email="owneruser@test.com",
+        password_hash=hash_password("owner123"),
+        first_name="Owner",
+        last_name="User",
         role=UserRole.ADMIN,
         is_active=True,
         login_attempts=0,
@@ -382,6 +402,13 @@ async def client() -> AsyncGenerator[AsyncClient, None]:
     app.dependency_overrides[get_db] = override_get_db
     app.dependency_overrides[get_redis] = override_get_redis
 
+    # Init FastAPILimiter with FakeRedis so rate-limited endpoints don't error
+    try:
+        from fastapi_limiter import FastAPILimiter
+        await FastAPILimiter.init(_fake_redis_instance)
+    except Exception:
+        pass  # FastAPILimiter may already be initialized
+
     transport = ASGITransport(app=app, raise_app_exceptions=False)
     async with AsyncClient(
         transport=transport,
@@ -424,6 +451,12 @@ async def seed_owner(setup_database):
     async with TestSessionLocal() as session:
         existing = (await session.execute(select(Owner).where(Owner.owner_id == 2))).scalar_one_or_none()
         if existing:
+            # Ensure owneruser also exists (may have been created by seed_owner_plant_room_device)
+            user = (await session.execute(select(User).where(User.username == "owneruser"))).scalar_one_or_none()
+            if not user:
+                user = User(owner_id=2, username="owneruser", email="owneruser@test.com", password_hash=hash_password("owner123"), first_name="Owner", last_name="User", role=UserRole.ADMIN, is_active=True, login_attempts=0)
+                session.add(user)
+                await session.commit()
             return existing
         owner = Owner(owner_id=2, company_name="Test Mushroom Co", owner_name="Test Owner 2", email="owner2@test.com")
         session.add(owner)

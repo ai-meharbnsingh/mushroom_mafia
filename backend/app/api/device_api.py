@@ -1,5 +1,5 @@
 import re
-from datetime import datetime
+from datetime import datetime, timezone
 
 from fastapi import APIRouter, Depends, Header, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -58,7 +58,7 @@ async def register_device(
     device.firmware_version = request.firmware_version
     device.hardware_version = request.hardware_version
     device.is_online = True
-    device.last_seen = datetime.utcnow()
+    device.last_seen = datetime.now(timezone.utc)
 
     await db.commit()
     await db.refresh(device)
@@ -73,7 +73,7 @@ async def register_device(
                 "device_name": device.device_name or f"Device-{device.device_id}",
                 "mac_address": device.mac_address,
                 "license_key": device.license_key,
-                "timestamp": datetime.utcnow().isoformat(),
+                "timestamp": datetime.now(timezone.utc).isoformat(),
             },
         )
     except Exception:
@@ -183,7 +183,7 @@ async def submit_reading(
     return {
         "status": "success",
         "reading_id": reading_id,
-        "timestamp": datetime.utcnow().isoformat(),
+        "timestamp": datetime.now(timezone.utc).isoformat(),
     }
 
 
@@ -199,7 +199,7 @@ async def device_heartbeat(
     Updates device fields and confirms the device is online.
     """
     device.is_online = True
-    device.last_seen = datetime.utcnow()
+    device.last_seen = datetime.now(timezone.utc)
 
     if "device_ip" in payload:
         device.device_ip = payload["device_ip"]
@@ -212,7 +212,7 @@ async def device_heartbeat(
 
     return {
         "status": "success",
-        "server_time": datetime.utcnow().isoformat(),
+        "server_time": datetime.now(timezone.utc).isoformat(),
     }
 
 

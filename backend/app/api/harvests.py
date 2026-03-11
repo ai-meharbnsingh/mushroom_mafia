@@ -1,4 +1,4 @@
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from decimal import Decimal
 from typing import Optional
 
@@ -68,7 +68,7 @@ async def create_harvest(
 
     harvest = Harvest(
         room_id=body.room_id,
-        harvested_at=body.harvested_at or datetime.utcnow(),
+        harvested_at=body.harvested_at or datetime.now(timezone.utc),
         weight_kg=body.weight_kg,
         grade=grade,
         notes=body.notes,
@@ -121,7 +121,7 @@ async def get_harvest_summary(
     if not room_ids:
         return []
 
-    cutoff = datetime.utcnow() - timedelta(days=months * 30)
+    cutoff = datetime.now(timezone.utc) - timedelta(days=months * 30)
 
     return await _build_summary(db, room_ids, cutoff, period)
 
@@ -137,7 +137,7 @@ async def get_room_harvest_summary(
     """Get yield summary for a specific room, grouped by period."""
     await _verify_room_ownership(db, room_id, current_user.owner_id)
 
-    cutoff = datetime.utcnow() - timedelta(days=months * 30)
+    cutoff = datetime.now(timezone.utc) - timedelta(days=months * 30)
 
     return await _build_summary(db, [room_id], cutoff, period)
 
