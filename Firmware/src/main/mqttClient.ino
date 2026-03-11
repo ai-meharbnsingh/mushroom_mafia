@@ -62,9 +62,13 @@ bool connectMQTT() {
         lcd.print("/");
         lcd.print(maxRetries);
 
-        Serial.printf("MQTT TLS connecting as: %s (attempt %d/%d)\n", clientId.c_str(), attempt, maxRetries);
+        // Use provisioned per-device credentials when available, fall back to default only during bootstrap
+        const char* connectPassword = (mqttProvisioned && strlen(devicePassword) > 0) ? devicePassword : mqttDefaultPassword;
+        Serial.printf("MQTT TLS connecting as: %s (attempt %d/%d, %s credentials)\n",
+                      clientId.c_str(), attempt, maxRetries,
+                      (connectPassword == mqttDefaultPassword) ? "default" : "provisioned");
 
-        if (mqttClient.connect(clientId.c_str(), mqttUsername, mqttDefaultPassword,
+        if (mqttClient.connect(clientId.c_str(), mqttUsername, connectPassword,
                                statusTopic.c_str(), 1, true, lwtPayload.c_str())) {
             Serial.println("MQTT TLS Connected");
             lcd.setCursor(0, 1);
@@ -201,17 +205,25 @@ void handleRelayCommand(String payload) {
 
     bool relayState = (state == "ON" || state == "true");
 
+    bool recognized = true;
+
     if (relayType == "CO2" || relayType == "co2") {
         digitalWrite(CO2_RELAY_3, relayState ? HIGH : LOW);
         _co2RelayStatus = relayState;
+        writeToEeprom<bool>(ADDR_CO2_RELAY_STATUS, _co2RelayStatus);
+        eepromDirty = true;
         Serial.println("MQTT: CO2 relay -> " + String(relayState ? "ON" : "OFF"));
     } else if (relayType == "HUMIDITY" || relayType == "humidity") {
         digitalWrite(HUMIDITY_RELAY_1, relayState ? HIGH : LOW);
         _humidityRelayStatus = relayState;
+        writeToEeprom<bool>(ADDR_HUM_RELAY_STATUS, _humidityRelayStatus);
+        eepromDirty = true;
         Serial.println("MQTT: Humidity relay -> " + String(relayState ? "ON" : "OFF"));
     } else if (relayType == "TEMPERATURE" || relayType == "temperature") {
         digitalWrite(TEMP_RELAY_2, relayState ? HIGH : LOW);
         _ACRelayStatus = relayState;
+        writeToEeprom<bool>(ADDR_AC_RELAY_STATUS, _ACRelayStatus);
+        eepromDirty = true;
         Serial.println("MQTT: Temp relay -> " + String(relayState ? "ON" : "OFF"));
     } else if (relayType == "AHU" || relayType == "ahu") {
         digitalWrite(AHU_RELAY_4, relayState ? HIGH : LOW);
@@ -237,7 +249,28 @@ void handleRelayCommand(String payload) {
         writeToEeprom<bool>(ADDR_EXTRA_RELAY_STATUS, _extraRelayStatus);
         eepromDirty = true;
         Serial.println("MQTT: Extra relay -> " + String(relayState ? "ON" : "OFF"));
+    } else {
+        recognized = false;
+        Serial.println("MQTT: Unknown relay type: " + relayType);
     }
+
+    // Publish ACK back to backend confirming relay state change
+    if (recognized) {
+        publishRelayAck(relayType, relayState);
+    }
+}
+
+void publishRelayAck(String relayType, bool state) {
+    String topic = "device/" + String(licenseKey) + "/relay_ack";
+    StaticJsonDocument<200> ackDoc;
+    ackDoc["relay_type"] = relayType;
+    ackDoc["state"] = state ? "ON" : "OFF";
+    ackDoc["status"] = "confirmed";
+    ackDoc["uptime_ms"] = millis();
+    char ackBuf[200];
+    serializeJson(ackDoc, ackBuf, sizeof(ackBuf));
+    mqttClient.publish(topic.c_str(), ackBuf);
+    Serial.println("MQTT: Relay ACK published -> " + topic);
 }
 
 void handleOTA(String payload) {
@@ -353,6 +386,21 @@ void handleOTA(String payload) {
     }
 
     // ─── 5. Stream firmware to flash with progress on LCD ──────────
+    // Parse expected checksum (format: "sha256:hexdigest" or just "hexdigest")
+    String expectedHash = "";
+    if (strlen(checksum) > 0) {
+        expectedHash = String(checksum);
+        if (expectedHash.startsWith("sha256:")) {
+            expectedHash = expectedHash.substring(7);
+        }
+        expectedHash.toLowerCase();
+    }
+
+    // Initialize SHA256 context for streaming hash computation
+    mbedtls_sha256_context sha256_ctx;
+    mbedtls_sha256_init(&sha256_ctx);
+    mbedtls_sha256_starts(&sha256_ctx, 0);  // 0 = SHA256 (not SHA224)
+
     WiFiClient* stream = http.getStreamPtr();
     uint8_t buf[1024];
     int written = 0;
@@ -369,6 +417,7 @@ void handleOTA(String payload) {
         size_t available = stream->available();
         if (available) {
             int bytesRead = stream->readBytes(buf, min(available, sizeof(buf)));
+            mbedtls_sha256_update(&sha256_ctx, buf, bytesRead);
             int bytesWritten = Update.write(buf, bytesRead);
             if (bytesWritten != bytesRead) {
                 Serial.printf("OTA: Write mismatch (%d != %d)\n", bytesWritten, bytesRead);
@@ -408,12 +457,46 @@ void handleOTA(String payload) {
 
     if (written != contentLength) {
         Serial.printf("OTA: Size mismatch (wrote %d, expected %d)\n", written, contentLength);
+        mbedtls_sha256_free(&sha256_ctx);
         Update.abort();
         lcd.clear();
         lcd.print("OTA: Size mismatch");
         delay(3000);
         setupMQTT(); connectMQTT();
         return;
+    }
+
+    // ─── 5b. Verify SHA256 checksum before finalizing ────────────────
+    if (expectedHash.length() > 0) {
+        uint8_t sha256_result[32];
+        mbedtls_sha256_finish(&sha256_ctx, sha256_result);
+        mbedtls_sha256_free(&sha256_ctx);
+
+        // Convert to hex string
+        char computedHash[65];
+        for (int i = 0; i < 32; i++) {
+            sprintf(computedHash + (i * 2), "%02x", sha256_result[i]);
+        }
+        computedHash[64] = '\0';
+
+        Serial.printf("OTA: Expected SHA256: %s\n", expectedHash.c_str());
+        Serial.printf("OTA: Computed SHA256: %s\n", computedHash);
+
+        if (expectedHash != String(computedHash)) {
+            Serial.println("OTA: CHECKSUM MISMATCH — aborting update");
+            Update.abort();
+            lcd.clear();
+            lcd.print("OTA: Bad checksum");
+            lcd.setCursor(0, 1);
+            lcd.print("Update aborted");
+            delay(3000);
+            setupMQTT(); connectMQTT();
+            return;
+        }
+        Serial.println("OTA: Checksum verified OK");
+    } else {
+        mbedtls_sha256_free(&sha256_ctx);
+        Serial.println("OTA: No checksum provided — skipping verification");
     }
 
     // ─── 6. Finalize and verify ────────────────────────────────────

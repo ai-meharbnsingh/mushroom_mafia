@@ -20,6 +20,7 @@
 #include <Update.h>                      // Arduino OTA Update library
 #include <esp_ota_ops.h>                 // ESP-IDF OTA partition operations (dual-partition rollback)
 #include <WiFiClientSecure.h>
+#include <mbedtls/sha256.h>          // SHA256 for OTA checksum verification
 #include <time.h>
 #include <esp_task_wdt.h>                // Hardware watchdog timer (Risk 2)
 

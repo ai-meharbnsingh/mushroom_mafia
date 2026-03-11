@@ -17,6 +17,13 @@ logger = logging.getLogger(__name__)
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    # Production guard: refuse to start with default secrets
+    if settings.is_production:
+        if settings.JWT_SECRET.startswith("change-me"):
+            raise RuntimeError("FATAL: JWT_SECRET not set — refusing to start in production with default secret")
+        if settings.DEVICE_ENCRYPTION_KEY.startswith("change-me"):
+            raise RuntimeError("FATAL: DEVICE_ENCRYPTION_KEY not set — refusing to start in production with default key")
+
     # Redis (optional — graceful fallback if unavailable)
     try:
         await init_redis()

@@ -2,7 +2,7 @@
 
 import csv
 import io
-from datetime import datetime, date
+from datetime import datetime, date, timezone
 from pathlib import Path
 
 from sqlalchemy import select, func, cast, Date
@@ -34,7 +34,7 @@ async def generate_report(
     """
     REPORTS_DIR.mkdir(parents=True, exist_ok=True)
 
-    timestamp = datetime.utcnow().strftime("%Y%m%d_%H%M%S")
+    timestamp = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")
     filename = f"{report_type}_{timestamp}.csv"
     file_path = REPORTS_DIR / filename
 

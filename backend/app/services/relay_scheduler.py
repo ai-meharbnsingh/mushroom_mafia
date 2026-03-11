@@ -1,7 +1,7 @@
 import asyncio
 import json
 import logging
-from datetime import datetime
+from datetime import datetime, timezone
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -61,7 +61,7 @@ async def _check_schedules(db: AsyncSession):
     if not redis_client:
         return
 
-    now = datetime.utcnow()
+    now = datetime.now(timezone.utc)
 
     result = await db.execute(
         select(RelaySchedule).where(RelaySchedule.is_active == True)

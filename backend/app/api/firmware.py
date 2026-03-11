@@ -2,7 +2,8 @@ import hashlib
 import io
 import logging
 import os
-from datetime import datetime
+import re
+from datetime import datetime, timezone
 from pathlib import Path
 
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form, status, Header
@@ -75,6 +76,13 @@ async def upload_firmware(
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Only .bin firmware files are accepted",
+        )
+
+    # Validate version format (alphanumeric, dots, hyphens, plus signs)
+    if not re.match(r'^[\w][\w.+-]*$', version):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Invalid version format. Use alphanumeric characters, dots, hyphens, and plus signs.",
         )
 
     # Check version uniqueness
@@ -248,7 +256,7 @@ async def rollout_firmware(
         )
 
     # Build download URL
-    api_scheme = os.getenv("API_SCHEME", "http")
+    api_scheme = os.getenv("API_SCHEME", "https")
     api_host = os.getenv("API_HOST", "localhost")
     api_port = os.getenv("API_PORT", "3800")
     download_url = (
@@ -269,7 +277,7 @@ async def rollout_firmware(
             try:
                 # Update device OTA status
                 device.ota_status = "downloading"
-                device.last_ota_at = datetime.utcnow()
+                device.last_ota_at = datetime.now(timezone.utc)
 
                 # Publish OTA command via MQTT
                 if mqtt_manager._client:

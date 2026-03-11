@@ -1,4 +1,5 @@
-from datetime import datetime
+import re
+from datetime import datetime, timezone
 
 from fastapi import APIRouter, Depends, Header, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -20,11 +21,15 @@ from app.services.reading_service import process_reading
 from app.services.ws_manager import ws_manager
 from app.utils.security import decrypt_device_password
 from app.config import settings
+from fastapi_limiter.depends import RateLimiter
+
+# License key format: LIC-XXXX-YYYY-ZZZZ (uppercase alphanumeric groups)
+LICENSE_KEY_PATTERN = re.compile(r'^LIC-[A-Z0-9]{4}-[A-Z0-9]{4}-[A-Z0-9]{4}$')
 
 router = APIRouter()
 
 
-@router.post("/register", response_model=DeviceRegisterResponse)
+@router.post("/register", response_model=DeviceRegisterResponse, dependencies=[Depends(RateLimiter(times=5, seconds=60))])
 async def register_device(
     request: DeviceRegisterRequest,
     db: AsyncSession = Depends(get_db),
@@ -53,7 +58,7 @@ async def register_device(
     device.firmware_version = request.firmware_version
     device.hardware_version = request.hardware_version
     device.is_online = True
-    device.last_seen = datetime.utcnow()
+    device.last_seen = datetime.now(timezone.utc)
 
     await db.commit()
     await db.refresh(device)
@@ -68,7 +73,7 @@ async def register_device(
                 "device_name": device.device_name or f"Device-{device.device_id}",
                 "mac_address": device.mac_address,
                 "license_key": device.license_key,
-                "timestamp": datetime.utcnow().isoformat(),
+                "timestamp": datetime.now(timezone.utc).isoformat(),
             },
         )
     except Exception:
@@ -82,9 +87,10 @@ async def register_device(
     )
 
 
-@router.get("/provision/{license_key}", response_model=DeviceProvisioningInfo)
+@router.get("/provision/{license_key}", response_model=DeviceProvisioningInfo, dependencies=[Depends(RateLimiter(times=10, seconds=60))])
 async def poll_provisioning(
     license_key: str,
+    x_mac_address: str | None = Header(None, alias="X-Mac-Address"),
     db: AsyncSession = Depends(get_db),
 ):
     """ESP32 polls this endpoint to check provisioning status and get MQTT credentials.
@@ -92,13 +98,25 @@ async def poll_provisioning(
     - PENDING: device awaits assignment
     - ACTIVE + device_password: returns decrypted password + MQTT broker info
     - SUSPENDED/EXPIRED: device should stop operating
+
+    Optional X-Mac-Address header: if provided, verifies MAC matches the device record.
     """
-    result = await db.execute(
-        select(Device).where(
-            Device.license_key == license_key,
-            Device.is_active == True,
+    # Validate license key format
+    if not LICENSE_KEY_PATTERN.match(license_key):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Invalid license key format",
         )
+
+    query = select(Device).where(
+        Device.license_key == license_key,
+        Device.is_active == True,
     )
+    # If MAC address header provided, verify it matches
+    if x_mac_address:
+        query = query.where(Device.mac_address == x_mac_address)
+
+    result = await db.execute(query)
     device = result.scalar_one_or_none()
     if not device:
         raise HTTPException(
@@ -165,7 +183,7 @@ async def submit_reading(
     return {
         "status": "success",
         "reading_id": reading_id,
-        "timestamp": datetime.utcnow().isoformat(),
+        "timestamp": datetime.now(timezone.utc).isoformat(),
     }
 
 
@@ -181,7 +199,7 @@ async def device_heartbeat(
     Updates device fields and confirms the device is online.
     """
     device.is_online = True
-    device.last_seen = datetime.utcnow()
+    device.last_seen = datetime.now(timezone.utc)
 
     if "device_ip" in payload:
         device.device_ip = payload["device_ip"]
@@ -194,7 +212,7 @@ async def device_heartbeat(
 
     return {
         "status": "success",
-        "server_time": datetime.utcnow().isoformat(),
+        "server_time": datetime.now(timezone.utc).isoformat(),
     }
 
 

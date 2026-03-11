@@ -1,7 +1,7 @@
 import asyncio
 import json
 import logging
-from datetime import datetime
+from datetime import datetime, timezone
 
 import aiomqtt
 
@@ -43,6 +43,7 @@ class MQTTManager:
                     # Subscribe to all device topics
                     await client.subscribe("device/+/telemetry")
                     await client.subscribe("device/+/status")
+                    await client.subscribe("device/+/relay_ack")
 
                     async for message in client.messages:
                         await self._handle_message(message)
@@ -87,6 +88,8 @@ class MQTTManager:
             await self._handle_telemetry(license_key, payload)
         elif msg_type == "status":
             await self._handle_status(license_key, payload)
+        elif msg_type == "relay_ack":
+            await self._handle_relay_ack(license_key, payload)
 
     async def _handle_telemetry(self, license_key: str, data: dict):
         """Process telemetry from device -- store in Redis + DB + WebSocket push."""
@@ -110,7 +113,7 @@ class MQTTManager:
 
                 # Update device status
                 device.is_online = True
-                device.last_seen = datetime.utcnow()
+                device.last_seen = datetime.now(timezone.utc)
                 if "wifi_rssi" in data:
                     device.wifi_rssi = data["wifi_rssi"]
                 if "free_heap" in data:
@@ -160,6 +163,80 @@ class MQTTManager:
         except Exception as e:
             logger.error(
                 "Error handling status from %s: %s", license_key, e
+            )
+
+    async def _handle_relay_ack(self, license_key: str, data: dict):
+        """Handle relay ACK from device — confirms relay state was applied.
+
+        Updates Redis live relay state and pushes WebSocket notification
+        so the dashboard reflects the confirmed state immediately.
+        """
+        from app.database import async_session_factory
+        from app.redis_client import redis_client
+        from app.models.device import Device
+        from app.models.plant import Plant
+        from app.models.room import Room
+        from app.services.ws_manager import ws_manager
+        from sqlalchemy import select
+
+        relay_type = data.get("relay_type", "")
+        state = data.get("state", "")
+        ack_status = data.get("status", "")
+
+        if ack_status != "confirmed":
+            logger.warning(
+                "Relay ACK from %s with non-confirmed status: %s",
+                license_key, ack_status,
+            )
+            return
+
+        try:
+            async with async_session_factory() as db:
+                result = await db.execute(
+                    select(Device).where(Device.license_key == license_key)
+                )
+                device = result.scalar_one_or_none()
+                if not device:
+                    logger.warning("Relay ACK from unknown device: %s", license_key)
+                    return
+
+                # Update Redis live relay state
+                if redis_client:
+                    import json as _json
+                    key = f"live:relay:{device.device_id}"
+                    raw = await redis_client.get(key)
+                    relay_states = _json.loads(raw) if raw else {}
+                    relay_states[relay_type.lower()] = state == "ON"
+                    await redis_client.setex(key, 300, _json.dumps(relay_states))
+
+                # Push WebSocket notification to device owner
+                if device.room_id:
+                    ownership = await db.execute(
+                        select(Plant.owner_id)
+                        .join(Room, Room.plant_id == Plant.plant_id)
+                        .where(Room.room_id == device.room_id)
+                    )
+                    owner_id = ownership.scalar_one_or_none()
+                    if owner_id:
+                        await ws_manager.broadcast_to_owner(
+                            owner_id,
+                            "relay_ack",
+                            {
+                                "device_id": device.device_id,
+                                "relay_type": relay_type,
+                                "state": state,
+                                "status": "confirmed",
+                                "timestamp": datetime.now(timezone.utc).isoformat(),
+                            },
+                        )
+
+                logger.info(
+                    "Relay ACK: device %s (%s) confirmed %s -> %s",
+                    device.device_id, license_key, relay_type, state,
+                )
+        except Exception as e:
+            logger.error(
+                "Error handling relay ACK from %s: %s", license_key, e
             )
 
     async def publish_control(self, license_key: str, action: str):

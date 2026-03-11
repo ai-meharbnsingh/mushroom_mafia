@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import datetime, timezone
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -421,7 +421,7 @@ async def link_device(
     device.subscription_status = SubscriptionStatus.PENDING_APPROVAL
     device.room_id = link_in.room_id
     device.linked_by_user_id = current_user.user_id
-    device.linked_at = datetime.utcnow()
+    device.linked_at = datetime.now(timezone.utc)
 
     await db.commit()
     await db.refresh(device)
@@ -443,7 +443,7 @@ async def link_device(
                     "device_name": device.device_name or f"Device-{device.device_id}",
                     "room_id": device.room_id,
                     "status": "PENDING_APPROVAL",
-                    "timestamp": datetime.utcnow().isoformat(),
+                    "timestamp": datetime.now(timezone.utc).isoformat(),
                 },
             )
     except Exception:

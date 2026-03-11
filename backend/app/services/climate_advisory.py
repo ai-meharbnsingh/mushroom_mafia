@@ -4,7 +4,7 @@ and auto-adjusts thresholds when growth stages advance.
 """
 
 import logging
-from datetime import datetime
+from datetime import datetime, timezone
 from decimal import Decimal
 
 from sqlalchemy import select
@@ -197,7 +197,7 @@ async def get_advisory_for_room(
             deviations.append(deviation)
 
     # 6. Compute days_in_stage
-    now = datetime.utcnow()
+    now = datetime.now(timezone.utc)
     if cycle.stage_changed_at:
         days_in_stage = (now - cycle.stage_changed_at).days
     else:
