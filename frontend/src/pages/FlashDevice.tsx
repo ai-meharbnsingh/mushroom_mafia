@@ -333,11 +333,11 @@ export const FlashDevice: React.FC = () => {
 
         appendLog('Connecting to ESP32 bootloader...');
         await loader.main();
-        appendLog(`Connected. Chip: ${loader.chipName}, MAC: ${loader.macAddr()}`);
+        appendLog(`Connected. Chip: ${(loader as any).chipName}, MAC: ${(loader as any).macAddr()}`);
         setFlashProgress(10);
 
         // Auto-fill MAC address if empty
-        const detectedMac = loader.macAddr();
+        const detectedMac = (loader as any).macAddr();
         if (detectedMac && !macAddress) {
           setMacAddress(detectedMac.toUpperCase());
           appendLog(`Auto-detected MAC: ${detectedMac.toUpperCase()}`);
@@ -352,7 +352,7 @@ export const FlashDevice: React.FC = () => {
         setFlashStage('flashing');
 
         const binArray = new Uint8Array(bin);
-        const fileArray = [{ data: binArray, address: 0x10000 }];
+        const fileArray = [{ data: binArray as any, address: 0x10000 }];
 
         await loader.writeFlash({
           fileArray,
