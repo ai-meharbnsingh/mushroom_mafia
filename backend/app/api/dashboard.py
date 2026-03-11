@@ -1,7 +1,7 @@
 import json
 from datetime import datetime, timezone
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func, or_
 from redis.asyncio import Redis
@@ -31,7 +31,7 @@ from app.api.deps import get_current_user, require_roles
 router = APIRouter()
 
 
-@router.get("/summary", response_model=DashboardSummary)
+@router.get("/summary", response_model=DashboardSummary, summary="Get dashboard summary counts")
 async def get_dashboard_summary(
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
@@ -122,7 +122,7 @@ async def get_dashboard_summary(
     )
 
 
-@router.get("/current-readings")
+@router.get("/current-readings", summary="Get all live sensor readings from Redis")
 async def get_current_readings(
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
@@ -157,7 +157,7 @@ async def get_current_readings(
     return {"readings": readings}
 
 
-@router.get("/admin-summary", response_model=AdminDashboardSummary)
+@router.get("/admin-summary", response_model=AdminDashboardSummary, summary="Get comprehensive admin dashboard data")
 async def get_admin_dashboard(
     current_user: User = Depends(
         require_roles(UserRole.ADMIN, UserRole.SUPER_ADMIN)
@@ -439,25 +439,21 @@ async def get_admin_dashboard(
     )
 
 
-@router.get("/plant/{plant_id}", response_model=PlantDashboardSummary)
+@router.get("/plant/{plant_id}", response_model=PlantDashboardSummary, summary="Get plant-specific dashboard data")
 async def get_plant_dashboard(
     plant_id: int,
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
     """Return plant-specific dashboard data. Ownership check applied."""
-    from app.models.enums import RoomStatus
-
     result = await db.execute(
         select(Plant).where(Plant.plant_id == plant_id, Plant.is_active == True)
     )
     plant = result.scalar_one_or_none()
     if not plant:
-        from fastapi import HTTPException
-        raise HTTPException(status_code=404, detail="Plant not found")
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Plant not found")
     if plant.owner_id != current_user.owner_id:
-        from fastapi import HTTPException
-        raise HTTPException(status_code=403, detail="Not allowed to view this plant")
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Not allowed to view this plant")
 
     # Rooms for this plant
     rooms_result = await db.execute(
