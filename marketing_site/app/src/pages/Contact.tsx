@@ -13,10 +13,31 @@ export default function Contact() {
     message: '',
   });
   const [submitted, setSubmitted] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [error, setError] = useState('');
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    setSubmitted(true);
+    setIsSubmitting(true);
+    setError('');
+
+    try {
+      const res = await fetch('/api/contact', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(formData),
+      });
+
+      if (!res.ok) {
+        throw new Error('Failed to send message');
+      }
+
+      setSubmitted(true);
+    } catch {
+      setError('Something went wrong. Please try again or email us directly.');
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   return (
@@ -220,12 +241,19 @@ export default function Contact() {
                         />
                       </div>
 
+                      {error && (
+                        <div className="p-3 rounded-lg bg-red-500/10 border border-red-500/20">
+                          <p className="text-sm text-red-400">{error}</p>
+                        </div>
+                      )}
+
                       <Button
                         type="submit"
-                        className="w-full bg-gradient-to-r from-cyan-500 to-green-500 hover:from-cyan-400 hover:to-green-400 text-white py-6 text-lg"
+                        disabled={isSubmitting}
+                        className="w-full bg-gradient-to-r from-cyan-500 to-green-500 hover:from-cyan-400 hover:to-green-400 text-white py-6 text-lg disabled:opacity-50"
                       >
                         <Send className="w-5 h-5 mr-2" />
-                        Send Message
+                        {isSubmitting ? 'Sending...' : 'Send Message'}
                       </Button>
                     </form>
                   </>
