@@ -1,6 +1,5 @@
 import secrets
 from fastapi import APIRouter, Depends, HTTPException, status, Response, Request
-from fastapi_limiter.depends import RateLimiter
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 
@@ -21,7 +20,7 @@ from app.utils.security import decode_token, hash_password, verify_password
 router = APIRouter()
 
 
-@router.post("/login", response_model=TokenResponse, dependencies=[Depends(RateLimiter(times=30, seconds=60))])
+@router.post("/login", response_model=TokenResponse)
 async def login(request: LoginRequest, response: Response, db: AsyncSession = Depends(get_db)):
     """Authenticate user and return access + refresh tokens."""
     user = await authenticate_user(db, request.username, request.password)
