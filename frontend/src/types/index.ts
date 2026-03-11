@@ -28,6 +28,7 @@ export interface Plant {
   address?: string;
   city: string;
   state: string;
+  pincode?: string;
   latitude?: number;
   longitude?: number;
   sizeSqft?: number;
@@ -39,6 +40,7 @@ export interface Plant {
 
 // Room Types
 export type RoomType = 'SPAWN_RUN' | 'FRUITING' | 'INCUBATION' | 'STORAGE';
+export type RoomStatus = 'ACTIVE' | 'SUSPENDED' | 'MAINTENANCE' | 'INACTIVE';
 
 export interface Room {
   id: string;
@@ -54,7 +56,7 @@ export interface Room {
   floorNumber: number;
   deviceId?: string;
   deviceName?: string;
-  status: 'ACTIVE' | 'INACTIVE' | 'MAINTENANCE';
+  status: RoomStatus;
   createdAt: string;
   updatedAt: string;
 }
@@ -302,6 +304,15 @@ export interface LoginFormData {
   password: string;
 }
 
+export interface NewAdminInline {
+  username: string;
+  email: string;
+  password: string;
+  firstName: string;
+  lastName: string;
+  mobile?: string;
+}
+
 export interface PlantFormData {
   name: string;
   code: string;
@@ -310,9 +321,12 @@ export interface PlantFormData {
   address?: string;
   city: string;
   state: string;
+  pincode: string;
   latitude?: number;
   longitude?: number;
   sizeSqft?: number;
+  adminUserId?: string;
+  newAdmin?: NewAdminInline;
 }
 
 export interface RoomFormData {
@@ -478,8 +492,36 @@ export interface PlantFilters {
 export interface RoomFilters {
   plantId?: string;
   roomType?: RoomType;
-  status?: 'ACTIVE' | 'INACTIVE' | 'MAINTENANCE';
+  status?: RoomStatus;
   search?: string;
+}
+
+// Plant Dashboard
+export interface PlantRoomSummary {
+  roomId: string;
+  roomName: string;
+  roomCode: string;
+  roomType: string;
+  status: string;
+  hasDevice: boolean;
+  deviceName?: string;
+  isOnline: boolean;
+}
+
+export interface PlantDashboardSummary {
+  plantId: string;
+  plantName: string;
+  plantCode: string;
+  plantType: string;
+  city?: string;
+  state?: string;
+  pincode?: string;
+  totalRooms: number;
+  totalDevices: number;
+  onlineDevices: number;
+  activeAlerts: number;
+  criticalAlerts: number;
+  rooms: PlantRoomSummary[];
 }
 
 export interface AlertFilters {

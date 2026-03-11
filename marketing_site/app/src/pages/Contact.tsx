@@ -1,34 +1,104 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import { ArrowLeft, Send, Mail, Phone, MapPin, MessageSquare } from 'lucide-react';
-import { Link } from 'react-router-dom';
+import { Link, useSearchParams } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 
+const PAGE_CONFIG: Record<string, { title: string; highlight: string; subtitle: string; defaultMessage: string; inquiryType: string }> = {
+  demo: {
+    title: 'Request a',
+    highlight: 'Demo',
+    subtitle: 'See how Mushroom Ki Mandi can transform your farm. Fill out the form and our team will schedule a personalized demo.',
+    defaultMessage: 'I would like to schedule a demo of the Mushroom Ki Mandi platform.',
+    inquiryType: 'DEMO',
+  },
+  enterprise: {
+    title: 'Request',
+    highlight: 'Enterprise Demo',
+    subtitle: 'Get a tailored walkthrough for large-scale commercial operations with custom API, on-premise options, and dedicated support.',
+    defaultMessage: 'I am interested in the Enterprise / Commercial Farm plan and would like a detailed demo.',
+    inquiryType: 'ENTERPRISE',
+  },
+  sales: {
+    title: 'Contact',
+    highlight: 'Sales',
+    subtitle: 'Talk to our sales team about custom pricing, volume discounts, and partnership opportunities.',
+    defaultMessage: 'I would like to discuss pricing and plans for my mushroom farm.',
+    inquiryType: 'SALES',
+  },
+  trial: {
+    title: 'Start Your',
+    highlight: 'Free Trial',
+    subtitle: 'Get started with a 14-day free trial. No credit card required. Our team will help you set up.',
+    defaultMessage: 'I would like to start a free 14-day trial of the platform.',
+    inquiryType: 'TRIAL',
+  },
+};
+
+const DEFAULT_CONFIG = {
+  title: 'Get in',
+  highlight: 'Touch',
+  subtitle: "Whether you're ready to modernize your farm or just want to learn more, we're here to help.",
+  defaultMessage: '',
+  inquiryType: 'GENERAL',
+};
+
 export default function Contact() {
+  const [searchParams] = useSearchParams();
+  const type = searchParams.get('type') || '';
+  const config = PAGE_CONFIG[type] || DEFAULT_CONFIG;
+
   const [formData, setFormData] = useState({
     name: '',
     email: '',
     phone: '',
     farmSize: '',
-    message: '',
+    message: config.defaultMessage,
   });
   const [submitted, setSubmitted] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState('');
+
+  useEffect(() => {
+    setFormData(prev => ({ ...prev, message: config.defaultMessage }));
+  }, [type]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsSubmitting(true);
     setError('');
 
+    const payload = {
+      ...formData,
+      inquiry_type: config.inquiryType,
+      farm_size: formData.farmSize,
+    };
+
     try {
-      const res = await fetch('/api/contact', {
+      // Send email via Vercel serverless function
+      const emailPromise = fetch('/api/contact', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(formData),
+        body: JSON.stringify({ ...formData, inquiryType: config.inquiryType }),
       });
 
-      if (!res.ok) {
+      // Save to backend DB (fire-and-forget, don't block on failure)
+      const dbPromise = fetch(`${import.meta.env.VITE_API_URL || ''}/api/v1/inquiries`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          inquiry_type: config.inquiryType,
+          name: formData.name,
+          email: formData.email,
+          phone: formData.phone || null,
+          farm_size: formData.farmSize || null,
+          message: formData.message,
+        }),
+      }).catch(() => {});
+
+      const [emailRes] = await Promise.all([emailPromise, dbPromise]);
+
+      if (!emailRes.ok) {
         throw new Error('Failed to send message');
       }
 
@@ -51,10 +121,10 @@ export default function Contact() {
 
           <div className="text-center mb-16">
             <h1 className="text-4xl sm:text-5xl font-bold text-white mb-4">
-              Get in <span className="text-gradient">Touch</span>
+              {config.title} <span className="text-gradient">{config.highlight}</span>
             </h1>
             <p className="text-lg text-slate-400 max-w-2xl mx-auto">
-              Whether you're ready to modernize your farm or just want to learn more, we're here to help.
+              {config.subtitle}
             </p>
           </div>
 
@@ -157,14 +227,16 @@ export default function Contact() {
                     <div className="w-20 h-20 rounded-full bg-green-500/20 flex items-center justify-center mx-auto mb-6">
                       <Send className="w-10 h-10 text-green-400" />
                     </div>
-                    <h3 className="text-2xl font-bold text-white mb-3">Message Sent!</h3>
+                    <h3 className="text-2xl font-bold text-white mb-3">
+                      {type === 'demo' || type === 'enterprise' ? 'Demo Request Sent!' : type === 'trial' ? 'Trial Request Sent!' : 'Message Sent!'}
+                    </h3>
                     <p className="text-slate-400 mb-6">
                       Thanks for reaching out. Our team will get back to you within 24 hours.
                     </p>
                     <Button
                       onClick={() => {
                         setSubmitted(false);
-                        setFormData({ name: '', email: '', phone: '', farmSize: '', message: '' });
+                        setFormData({ name: '', email: '', phone: '', farmSize: '', message: config.defaultMessage });
                       }}
                       variant="outline"
                       className="border-slate-600 text-slate-300 hover:bg-slate-800"
@@ -174,7 +246,9 @@ export default function Contact() {
                   </motion.div>
                 ) : (
                   <>
-                    <h2 className="text-2xl font-bold text-white mb-6">Send Us a Message</h2>
+                    <h2 className="text-2xl font-bold text-white mb-6">
+                      {type === 'demo' ? 'Schedule Your Demo' : type === 'enterprise' ? 'Enterprise Demo Request' : type === 'sales' ? 'Talk to Sales' : type === 'trial' ? 'Start Free Trial' : 'Send Us a Message'}
+                    </h2>
                     <form onSubmit={handleSubmit} className="space-y-5">
                       <div className="grid sm:grid-cols-2 gap-5">
                         <div>
@@ -253,7 +327,7 @@ export default function Contact() {
                         className="w-full bg-gradient-to-r from-cyan-500 to-green-500 hover:from-cyan-400 hover:to-green-400 text-white py-6 text-lg disabled:opacity-50"
                       >
                         <Send className="w-5 h-5 mr-2" />
-                        {isSubmitting ? 'Sending...' : 'Send Message'}
+                        {isSubmitting ? 'Sending...' : type === 'demo' || type === 'enterprise' ? 'Request Demo' : type === 'trial' ? 'Start Trial' : 'Send Message'}
                       </Button>
                     </form>
                   </>

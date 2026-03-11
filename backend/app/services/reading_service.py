@@ -1,5 +1,5 @@
 import json
-from datetime import datetime, timezone
+from datetime import datetime
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 from redis.asyncio import Redis
@@ -14,7 +14,7 @@ async def process_reading(
 ) -> int:
     """Process a sensor reading: store in Redis + PostgreSQL, check thresholds, push via WebSocket."""
 
-    now = datetime.now(timezone.utc)
+    now = datetime.utcnow()
 
     # 1. Build room_reading record
     reading = RoomReading(

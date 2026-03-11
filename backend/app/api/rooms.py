@@ -6,8 +6,8 @@ from app.database import get_db
 from app.models.room import Room
 from app.models.plant import Plant
 from app.models.user import User
-from app.models.enums import UserRole
-from app.schemas.room import RoomCreate, RoomUpdate, RoomResponse
+from app.models.enums import UserRole, RoomStatus
+from app.schemas.room import RoomCreate, RoomUpdate, RoomResponse, RoomStatusChange
 from app.api.deps import get_current_user, require_roles
 
 router = APIRouter()
@@ -67,7 +67,6 @@ async def create_room(
     db: AsyncSession = Depends(get_db),
 ):
     """Create a room. ADMIN/MANAGER. Verify plant belongs to owner."""
-    # Verify plant belongs to the user's owner
     plant_result = await db.execute(
         select(Plant).where(
             Plant.plant_id == room_in.plant_id, Plant.is_active == True
@@ -117,6 +116,36 @@ async def update_room(
     update_data = room_in.model_dump(exclude_unset=True)
     for field, value in update_data.items():
         setattr(room, field, value)
+    await db.commit()
+    await db.refresh(room)
+    return room
+
+
+@router.patch("/{room_id}/status", response_model=RoomResponse)
+async def change_room_status(
+    room_id: int,
+    status_in: RoomStatusChange,
+    current_user: User = Depends(
+        require_roles(UserRole.SUPER_ADMIN)
+    ),
+    db: AsyncSession = Depends(get_db),
+):
+    """Change room status. SUPER_ADMIN only."""
+    result = await db.execute(
+        select(Room)
+        .join(Plant, Room.plant_id == Plant.plant_id)
+        .where(
+            Room.room_id == room_id,
+            Room.is_active == True,
+            Plant.owner_id == current_user.owner_id,
+        )
+    )
+    room = result.scalar_one_or_none()
+    if not room:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Room not found"
+        )
+    room.status = RoomStatus(status_in.status)
     await db.commit()
     await db.refresh(room)
     return room

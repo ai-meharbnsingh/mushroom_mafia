@@ -3,7 +3,7 @@ import io
 import logging
 import os
 import re
-from datetime import datetime, timezone
+from datetime import datetime
 from pathlib import Path
 
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form, status, Header
@@ -277,7 +277,7 @@ async def rollout_firmware(
             try:
                 # Update device OTA status
                 device.ota_status = "downloading"
-                device.last_ota_at = datetime.now(timezone.utc)
+                device.last_ota_at = datetime.utcnow()
 
                 # Publish OTA command via MQTT
                 if mqtt_manager._client:

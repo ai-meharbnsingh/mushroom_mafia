@@ -33,6 +33,7 @@ from app.models.relay_schedule import RelaySchedule
 from app.models.harvest import Harvest
 from app.models.growth_cycle import GrowthCycle
 from app.models.climate_guideline import ClimateGuideline
+from app.models.inquiry import ContactInquiry, InquiryType
 
 __all__ = [
     "UserRole",
@@ -67,5 +68,7 @@ __all__ = [
     "Harvest",
     "GrowthCycle",
     "ClimateGuideline",
+    "ContactInquiry",
+    "InquiryType",
     "Base",
 ]

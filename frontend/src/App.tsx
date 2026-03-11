@@ -29,6 +29,7 @@ import { Users } from '@/pages/Users';
 import { Profile } from '@/pages/Profile';
 import { FirmwareManagement } from '@/pages/FirmwareManagement';
 import { FlashDevice } from '@/pages/FlashDevice';
+import { PlantDashboard } from '@/pages/PlantDashboard';
 
 // Protected Route Component
 const ProtectedRoute: React.FC<{ children: React.ReactNode }> = ({ children }) => {
@@ -184,6 +185,7 @@ function App() {
                 <Route index element={<Navigate to="/dashboard" replace />} />
                 <Route path="dashboard" element={<Dashboard />} />
                 <Route path="plants" element={<Plants />} />
+                <Route path="plants/:plantId" element={<PlantDashboard />} />
                 <Route path="rooms" element={<Rooms />} />
                 <Route path="rooms/:roomId" element={<RoomDetail />} />
                 <Route path="devices" element={<Devices />} />

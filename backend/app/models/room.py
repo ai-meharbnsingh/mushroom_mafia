@@ -5,7 +5,7 @@ from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
 
 from app.database import Base
-from app.models.enums import RoomType
+from app.models.enums import RoomType, RoomStatus
 
 
 class Room(Base):
@@ -16,6 +16,7 @@ class Room(Base):
     room_name = Column(String(100), nullable=False)
     room_code = Column(String(20), unique=True)
     room_type = Column(Enum(RoomType), default=RoomType.FRUITING)
+    status = Column(Enum(RoomStatus), default=RoomStatus.ACTIVE)
     room_size_sqft = Column(Integer)
     no_of_racks = Column(Integer, default=0)
     no_of_bags = Column(Integer, default=0)

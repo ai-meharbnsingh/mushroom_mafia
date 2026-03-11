@@ -112,6 +112,13 @@ class HarvestGrade(str, enum.Enum):
     C = "C"
 
 
+class RoomStatus(str, enum.Enum):
+    ACTIVE = "ACTIVE"
+    SUSPENDED = "SUSPENDED"
+    MAINTENANCE = "MAINTENANCE"
+    INACTIVE = "INACTIVE"
+
+
 class GrowthStage(str, enum.Enum):
     INOCULATION = "INOCULATION"
     SPAWN_RUN = "SPAWN_RUN"

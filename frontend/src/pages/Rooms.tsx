@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { gsap } from 'gsap';
-import { Plus, Search, Filter, Edit2, ChevronRight } from 'lucide-react';
+import { Plus, Search, Filter, Edit2, ChevronRight, Shield, Play, Pause, Wrench } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -25,20 +25,22 @@ import { useApp } from '@/store/AppContext';
 import { useToast } from '@/hooks/useToast';
 import { roomService } from '@/services/roomService';
 import { mapRoom, toRoomCreate, toRoomUpdate } from '@/utils/mappers';
-import type { Room, RoomType, RoomFormData } from '@/types';
+import type { Room, RoomType, RoomFormData, RoomStatus } from '@/types';
 
 export const Rooms: React.FC = () => {
   const navigate = useNavigate();
   const { state, dispatch } = useApp();
   const toast = useToast();
   const tableRef = useRef<HTMLDivElement>(null);
-  
+  const isSuperAdmin = state.currentUser?.role === 'SUPER_ADMIN';
+
   const [searchQuery, setSearchQuery] = useState('');
   const [plantFilter, setPlantFilter] = useState<string>('ALL');
   const [typeFilter, setTypeFilter] = useState<RoomType | 'ALL'>('ALL');
+  const [statusFilter, setStatusFilter] = useState<RoomStatus | 'ALL'>('ALL');
   const [isDrawerOpen, setIsDrawerOpen] = useState(false);
   const [editingRoom, setEditingRoom] = useState<Room | null>(null);
-  
+
   const [formData, setFormData] = useState<RoomFormData>({
     name: '',
     code: '',
@@ -50,7 +52,7 @@ export const Rooms: React.FC = () => {
     bagsPerRack: 10,
     floorNumber: 1,
   });
-  
+
   useEffect(() => {
     if (tableRef.current) {
       gsap.fromTo(
@@ -60,20 +62,20 @@ export const Rooms: React.FC = () => {
       );
     }
   }, []);
-  
-  // Filter rooms
+
   const filteredRooms = state.rooms.filter(room => {
     const matchesSearch =
       searchQuery === '' ||
       room.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
       room.code.toLowerCase().includes(searchQuery.toLowerCase());
-    
+
     const matchesPlant = plantFilter === 'ALL' || room.plantId === plantFilter;
     const matchesType = typeFilter === 'ALL' || room.roomType === typeFilter;
-    
-    return matchesSearch && matchesPlant && matchesType;
+    const matchesStatus = statusFilter === 'ALL' || room.status === statusFilter;
+
+    return matchesSearch && matchesPlant && matchesType && matchesStatus;
   });
-  
+
   const handleOpenDrawer = (room?: Room) => {
     if (room) {
       setEditingRoom(room);
@@ -104,7 +106,7 @@ export const Rooms: React.FC = () => {
     }
     setIsDrawerOpen(true);
   };
-  
+
   const handleSave = async () => {
     if (!formData.name || !formData.code || !formData.plantId) {
       toast.error('Please fill in all required fields');
@@ -126,7 +128,27 @@ export const Rooms: React.FC = () => {
       toast.error(err?.response?.data?.detail || 'Failed to save room');
     }
   };
-  
+
+  const handleStatusChange = async (room: Room, newStatus: RoomStatus) => {
+    try {
+      const res = await roomService.changeStatus(Number(room.id), newStatus);
+      dispatch({ type: 'UPDATE_ROOM', payload: mapRoom(res, state.plants) });
+      toast.success(`Room status changed to ${newStatus}`);
+    } catch (err: any) {
+      toast.error(err?.response?.data?.detail || 'Failed to change room status');
+    }
+  };
+
+  const statusBadgeVariant = (status: string) => {
+    switch (status) {
+      case 'ACTIVE': return 'active';
+      case 'SUSPENDED': return 'warning';
+      case 'MAINTENANCE': return 'warning';
+      case 'INACTIVE': return 'inactive';
+      default: return 'active';
+    }
+  };
+
   return (
     <div className="space-y-6">
       {/* Header */}
@@ -143,7 +165,7 @@ export const Rooms: React.FC = () => {
           New Room
         </Button>
       </div>
-      
+
       {/* Filters */}
       <div className="flex flex-wrap items-center gap-3">
         <div className="relative flex-1 min-w-[200px] max-w-sm">
@@ -156,7 +178,7 @@ export const Rooms: React.FC = () => {
             className="input-dark pl-10 w-full"
           />
         </div>
-        
+
         <Select value={plantFilter} onValueChange={setPlantFilter}>
           <SelectTrigger className="input-dark w-48">
             <Filter className="w-4 h-4 mr-2" />
@@ -169,7 +191,7 @@ export const Rooms: React.FC = () => {
             ))}
           </SelectContent>
         </Select>
-        
+
         <Select value={typeFilter} onValueChange={(v) => setTypeFilter(v as RoomType | 'ALL')}>
           <SelectTrigger className="input-dark w-40">
             <SelectValue placeholder="Type" />
@@ -182,8 +204,21 @@ export const Rooms: React.FC = () => {
             <SelectItem value="STORAGE">Storage</SelectItem>
           </SelectContent>
         </Select>
+
+        <Select value={statusFilter} onValueChange={(v) => setStatusFilter(v as RoomStatus | 'ALL')}>
+          <SelectTrigger className="input-dark w-40">
+            <SelectValue placeholder="Status" />
+          </SelectTrigger>
+          <SelectContent className="bg-iot-secondary border-iot-subtle">
+            <SelectItem value="ALL">All Status</SelectItem>
+            <SelectItem value="ACTIVE">Active</SelectItem>
+            <SelectItem value="SUSPENDED">Suspended</SelectItem>
+            <SelectItem value="MAINTENANCE">Maintenance</SelectItem>
+            <SelectItem value="INACTIVE">Inactive</SelectItem>
+          </SelectContent>
+        </Select>
       </div>
-      
+
       {/* Table */}
       {filteredRooms.length > 0 ? (
         <div
@@ -230,21 +265,64 @@ export const Rooms: React.FC = () => {
                       )}
                     </td>
                     <td>
-                      <StatusBadge
-                        status={room.status === 'ACTIVE' ? 'active' : room.status === 'MAINTENANCE' ? 'warning' : 'inactive'}
-                      />
+                      <StatusBadge status={statusBadgeVariant(room.status)} />
                     </td>
                     <td>
-                      <div className="flex items-center gap-2" onClick={(e) => e.stopPropagation()}>
+                      <div className="flex items-center gap-1" onClick={(e) => e.stopPropagation()}>
                         <button
                           onClick={() => handleOpenDrawer(room)}
                           className="p-1.5 rounded-lg text-iot-secondary hover:text-iot-cyan hover:bg-iot-cyan/10 transition-colors"
+                          title="Edit"
                         >
                           <Edit2 className="w-4 h-4" />
                         </button>
+
+                        {/* SUPER_ADMIN-only status actions */}
+                        {isSuperAdmin && (
+                          <>
+                            {room.status !== 'ACTIVE' && (
+                              <button
+                                onClick={() => handleStatusChange(room, 'ACTIVE')}
+                                className="p-1.5 rounded-lg text-iot-secondary hover:text-green-400 hover:bg-green-400/10 transition-colors"
+                                title="Activate"
+                              >
+                                <Play className="w-4 h-4" />
+                              </button>
+                            )}
+                            {room.status !== 'SUSPENDED' && (
+                              <button
+                                onClick={() => handleStatusChange(room, 'SUSPENDED')}
+                                className="p-1.5 rounded-lg text-iot-secondary hover:text-yellow-400 hover:bg-yellow-400/10 transition-colors"
+                                title="Suspend"
+                              >
+                                <Pause className="w-4 h-4" />
+                              </button>
+                            )}
+                            {room.status !== 'MAINTENANCE' && (
+                              <button
+                                onClick={() => handleStatusChange(room, 'MAINTENANCE')}
+                                className="p-1.5 rounded-lg text-iot-secondary hover:text-orange-400 hover:bg-orange-400/10 transition-colors"
+                                title="Maintenance"
+                              >
+                                <Wrench className="w-4 h-4" />
+                              </button>
+                            )}
+                            {room.status !== 'INACTIVE' && (
+                              <button
+                                onClick={() => handleStatusChange(room, 'INACTIVE')}
+                                className="p-1.5 rounded-lg text-iot-secondary hover:text-red-400 hover:bg-red-400/10 transition-colors"
+                                title="Deactivate"
+                              >
+                                <Shield className="w-4 h-4" />
+                              </button>
+                            )}
+                          </>
+                        )}
+
                         <button
                           onClick={() => navigate(`/rooms/${room.id}`)}
                           className="p-1.5 rounded-lg text-iot-secondary hover:text-iot-primary hover:bg-iot-tertiary transition-colors"
+                          title="View"
                         >
                           <ChevronRight className="w-4 h-4" />
                         </button>
@@ -265,7 +343,7 @@ export const Rooms: React.FC = () => {
           onAction={() => handleOpenDrawer()}
         />
       )}
-      
+
       {/* Create/Edit Drawer */}
       <Sheet open={isDrawerOpen} onOpenChange={setIsDrawerOpen}>
         <SheetContent className="bg-iot-secondary border-iot-subtle w-full sm:max-w-lg overflow-y-auto">
@@ -274,7 +352,7 @@ export const Rooms: React.FC = () => {
               {editingRoom ? 'Edit Room' : 'Create New Room'}
             </SheetTitle>
           </SheetHeader>
-          
+
           <div className="space-y-4 py-6">
             <div>
               <label className="block text-xs font-medium uppercase tracking-wider text-iot-secondary mb-2">
@@ -288,7 +366,7 @@ export const Rooms: React.FC = () => {
                 className="input-dark w-full"
               />
             </div>
-            
+
             <div>
               <label className="block text-xs font-medium uppercase tracking-wider text-iot-secondary mb-2">
                 Room Code *
@@ -301,7 +379,7 @@ export const Rooms: React.FC = () => {
                 className="input-dark w-full"
               />
             </div>
-            
+
             <div>
               <label className="block text-xs font-medium uppercase tracking-wider text-iot-secondary mb-2">
                 Plant *
@@ -320,7 +398,7 @@ export const Rooms: React.FC = () => {
                 </SelectContent>
               </Select>
             </div>
-            
+
             <div>
               <label className="block text-xs font-medium uppercase tracking-wider text-iot-secondary mb-2">
                 Room Type *
@@ -340,7 +418,7 @@ export const Rooms: React.FC = () => {
                 </SelectContent>
               </Select>
             </div>
-            
+
             <div>
               <label className="block text-xs font-medium uppercase tracking-wider text-iot-secondary mb-2">
                 Size (sq ft)
@@ -353,7 +431,7 @@ export const Rooms: React.FC = () => {
                 className="input-dark w-full"
               />
             </div>
-            
+
             <div className="grid grid-cols-2 gap-4">
               <div>
                 <label className="block text-xs font-medium uppercase tracking-wider text-iot-secondary mb-2">
@@ -378,7 +456,7 @@ export const Rooms: React.FC = () => {
                 />
               </div>
             </div>
-            
+
             <div className="grid grid-cols-2 gap-4">
               <div>
                 <label className="block text-xs font-medium uppercase tracking-wider text-iot-secondary mb-2">
@@ -404,7 +482,7 @@ export const Rooms: React.FC = () => {
               </div>
             </div>
           </div>
-          
+
           <SheetFooter className="gap-3">
             <Button
               variant="outline"

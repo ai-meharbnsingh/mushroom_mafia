@@ -1,4 +1,4 @@
-import type { Plant, Room, Device, Alert, User, Report, SensorReading, RoomThresholds, AdminDashboardSummary, PendingDevice } from '@/types';
+import type { Plant, Room, Device, Alert, User, Report, SensorReading, RoomThresholds, AdminDashboardSummary, PendingDevice, PlantDashboardSummary } from '@/types';
 
 // --- Plant ---
 export function mapPlant(p: any): Plant {
@@ -13,6 +13,7 @@ export function mapPlant(p: any): Plant {
     state: p.state ?? '',
     latitude: p.latitude,
     longitude: p.longitude,
+    pincode: p.pincode ?? '',
     sizeSqft: p.plant_size_sqft ?? p.sizeSqft,
     status: p.is_active === false ? 'INACTIVE' : 'ACTIVE',
     roomsCount: p.no_of_rooms ?? p.roomsCount ?? 0,
@@ -39,7 +40,7 @@ export function mapRoom(r: any, plants?: Plant[]): Room {
     floorNumber: r.floor_number ?? r.floorNumber ?? 1,
     deviceId: r.device_id ? String(r.device_id) : r.deviceId,
     deviceName: r.device_name ?? r.deviceName,
-    status: r.is_active === false ? 'INACTIVE' : 'ACTIVE',
+    status: r.status ?? (r.is_active === false ? 'INACTIVE' : 'ACTIVE'),
     createdAt: r.created_at ?? r.createdAt ?? new Date().toISOString(),
     updatedAt: r.updated_at ?? r.updatedAt ?? new Date().toISOString(),
   };
@@ -261,7 +262,7 @@ export function mapAdminDashboardSummary(data: any): AdminDashboardSummary {
 
 // --- Reverse mappers (frontend → backend for create/update) ---
 export function toPlantCreate(data: any, ownerId: number = 1) {
-  return {
+  const payload: any = {
     owner_id: ownerId,
     plant_name: data.name,
     plant_code: data.code,
@@ -270,10 +271,24 @@ export function toPlantCreate(data: any, ownerId: number = 1) {
     address: data.address,
     city: data.city,
     state: data.state,
+    pincode: data.pincode,
     latitude: data.latitude,
     longitude: data.longitude,
     plant_size_sqft: data.sizeSqft,
   };
+  if (data.adminUserId) {
+    payload.admin_user_id = Number(data.adminUserId);
+  } else if (data.newAdmin) {
+    payload.new_admin = {
+      username: data.newAdmin.username,
+      email: data.newAdmin.email,
+      password: data.newAdmin.password,
+      first_name: data.newAdmin.firstName,
+      last_name: data.newAdmin.lastName,
+      mobile: data.newAdmin.mobile,
+    };
+  }
+  return payload;
 }
 
 export function toPlantUpdate(data: any) {
@@ -285,9 +300,38 @@ export function toPlantUpdate(data: any) {
     address: data.address,
     city: data.city,
     state: data.state,
+    pincode: data.pincode,
     latitude: data.latitude,
     longitude: data.longitude,
     plant_size_sqft: data.sizeSqft,
+  };
+}
+
+// --- Plant Dashboard Summary ---
+export function mapPlantDashboardSummary(data: any): PlantDashboardSummary {
+  return {
+    plantId: String(data.plant_id),
+    plantName: data.plant_name ?? '',
+    plantCode: data.plant_code ?? '',
+    plantType: data.plant_type ?? '',
+    city: data.city,
+    state: data.state,
+    pincode: data.pincode,
+    totalRooms: data.total_rooms ?? 0,
+    totalDevices: data.total_devices ?? 0,
+    onlineDevices: data.online_devices ?? 0,
+    activeAlerts: data.active_alerts ?? 0,
+    criticalAlerts: data.critical_alerts ?? 0,
+    rooms: (data.rooms ?? []).map((r: any) => ({
+      roomId: String(r.room_id),
+      roomName: r.room_name ?? '',
+      roomCode: r.room_code ?? '',
+      roomType: r.room_type ?? '',
+      status: r.status ?? 'ACTIVE',
+      hasDevice: r.has_device ?? false,
+      deviceName: r.device_name,
+      isOnline: r.is_online ?? false,
+    })),
   };
 }
 

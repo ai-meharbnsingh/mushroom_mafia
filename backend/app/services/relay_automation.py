@@ -1,6 +1,6 @@
 import json
 import logging
-from datetime import datetime, timezone
+from datetime import datetime
 
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
@@ -158,7 +158,7 @@ async def evaluate_auto_relays(
     for t in thresholds:
         threshold_map[t.parameter.value] = t
 
-    now = datetime.now(timezone.utc)
+    now = datetime.utcnow()
 
     for config in auto_configs:
         if not config.threshold_param:

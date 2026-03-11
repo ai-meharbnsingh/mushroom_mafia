@@ -6,4 +6,5 @@ export const roomService = {
   create: (data: any) => api.post('/rooms', data).then(r => r.data),
   update: (id: number, data: any) => api.put(`/rooms/${id}`, data).then(r => r.data),
   delete: (id: number) => api.delete(`/rooms/${id}`),
+  changeStatus: (id: number, status: string) => api.patch(`/rooms/${id}/status`, { status }).then(r => r.data),
 };

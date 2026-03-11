@@ -1,4 +1,4 @@
-from datetime import datetime, timezone
+from datetime import datetime
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -90,11 +90,11 @@ async def create_growth_cycle(
     )
     for active_cycle in active_result.scalars().all():
         active_cycle.is_active = False
-        active_cycle.updated_at = datetime.now(timezone.utc)
+        active_cycle.updated_at = datetime.utcnow()
 
     cycle = GrowthCycle(
         room_id=body.room_id,
-        started_at=body.started_at or datetime.now(timezone.utc),
+        started_at=body.started_at or datetime.utcnow(),
         current_stage=stage,
         expected_harvest_date=body.expected_harvest_date,
         target_yield_kg=body.target_yield_kg,
@@ -144,7 +144,7 @@ async def advance_growth_stage(
             detail="Cannot advance an inactive cycle",
         )
 
-    now = datetime.now(timezone.utc)
+    now = datetime.utcnow()
 
     if body and body.current_stage:
         # Jump to specified stage

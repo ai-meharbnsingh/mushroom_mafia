@@ -20,6 +20,7 @@ class Plant(Base):
     address = Column(Text)
     city = Column(String(50))
     state = Column(String(50))
+    pincode = Column(String(10))
     latitude = Column(Numeric(10, 8))
     longitude = Column(Numeric(11, 8))
     plant_size_sqft = Column(Integer)

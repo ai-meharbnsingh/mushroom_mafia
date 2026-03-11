@@ -1,4 +1,4 @@
-from datetime import datetime, timezone
+from datetime import datetime
 from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
@@ -117,7 +117,7 @@ async def acknowledge_alert(
         )
     alert.is_read = True
     alert.acknowledged_by = current_user.user_id
-    alert.acknowledged_at = datetime.now(timezone.utc)
+    alert.acknowledged_at = datetime.utcnow()
     await db.commit()
     await db.refresh(alert)
     return alert
@@ -144,7 +144,7 @@ async def resolve_alert(
             status_code=status.HTTP_404_NOT_FOUND, detail="Alert not found"
         )
     alert.is_resolved = True
-    alert.resolved_at = datetime.now(timezone.utc)
+    alert.resolved_at = datetime.utcnow()
     await db.commit()
     await db.refresh(alert)
     return alert

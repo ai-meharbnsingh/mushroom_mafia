@@ -6,7 +6,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     return res.status(405).json({ error: 'Method not allowed' });
   }
 
-  const { name, email, phone, farmSize, message } = req.body;
+  const { name, email, phone, farmSize, message, inquiryType } = req.body;
 
   if (!name || !email || !message) {
     return res.status(400).json({ error: 'Name, email, and message are required' });
@@ -31,7 +31,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   const htmlBody = `
     <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
       <h2 style="color: #0891b2; border-bottom: 2px solid #0891b2; padding-bottom: 10px;">
-        New Contact Form Submission
+        ${inquiryType && inquiryType !== 'GENERAL' ? `New ${inquiryType} Request` : 'New Contact Form Submission'}
       </h2>
       <table style="width: 100%; border-collapse: collapse;">
         <tr>
@@ -50,6 +50,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           <td style="padding: 8px 0; font-weight: bold; color: #334155;">Farm Size:</td>
           <td style="padding: 8px 0; color: #1e293b;">${farmSizeLabel[farmSize] || farmSize}</td>
         </tr>` : ''}
+        ${inquiryType ? `<tr>
+          <td style="padding: 8px 0; font-weight: bold; color: #334155;">Type:</td>
+          <td style="padding: 8px 0;"><span style="background: #0891b2; color: white; padding: 2px 8px; border-radius: 4px; font-size: 12px;">${inquiryType}</span></td>
+        </tr>` : ''}
       </table>
       <div style="margin-top: 16px; padding: 16px; background: #f1f5f9; border-radius: 8px;">
         <h3 style="margin: 0 0 8px 0; color: #334155;">Message:</h3>
@@ -66,7 +70,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       from: `"Mushroom Ki Mandi" <${process.env.GMAIL_USER}>`,
       to: process.env.CONTACT_TO_EMAIL || process.env.GMAIL_USER,
       replyTo: email,
-      subject: `[MKM Contact] ${name} - ${farmSize ? farmSizeLabel[farmSize] || farmSize : 'General Inquiry'}`,
+      subject: `[MKM ${inquiryType || 'Contact'}] ${name} - ${farmSize ? farmSizeLabel[farmSize] || farmSize : 'General Inquiry'}`,
       html: htmlBody,
     });
 

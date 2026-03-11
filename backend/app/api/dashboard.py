@@ -1,5 +1,5 @@
 import json
-from datetime import datetime, timezone
+from datetime import datetime
 
 from fastapi import APIRouter, Depends
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -23,6 +23,8 @@ from app.schemas.dashboard import (
     AlertSummaryBreakdown,
     PlantOverview,
     RecentDeviceEvent,
+    PlantDashboardSummary,
+    PlantRoomSummary,
 )
 from app.api.deps import get_current_user, require_roles
 
@@ -281,7 +283,7 @@ async def get_admin_dashboard(
     )
 
     # --- Alert summary ---
-    today_start = datetime.now(timezone.utc).replace(
+    today_start = datetime.utcnow().replace(
         hour=0, minute=0, second=0, microsecond=0
     )
 
@@ -434,4 +436,106 @@ async def get_admin_dashboard(
         alerts=alerts,
         plants=plant_overviews,
         recent_events=recent_events,
+    )
+
+
+@router.get("/plant/{plant_id}", response_model=PlantDashboardSummary)
+async def get_plant_dashboard(
+    plant_id: int,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Return plant-specific dashboard data. Ownership check applied."""
+    from app.models.enums import RoomStatus
+
+    result = await db.execute(
+        select(Plant).where(Plant.plant_id == plant_id, Plant.is_active == True)
+    )
+    plant = result.scalar_one_or_none()
+    if not plant:
+        from fastapi import HTTPException
+        raise HTTPException(status_code=404, detail="Plant not found")
+    if plant.owner_id != current_user.owner_id:
+        from fastapi import HTTPException
+        raise HTTPException(status_code=403, detail="Not allowed to view this plant")
+
+    # Rooms for this plant
+    rooms_result = await db.execute(
+        select(Room).where(Room.plant_id == plant_id, Room.is_active == True)
+    )
+    rooms = rooms_result.scalars().all()
+    total_rooms = len(rooms)
+
+    # Build room summaries with device info
+    room_summaries = []
+    for room in rooms:
+        dev_result = await db.execute(
+            select(Device).where(
+                Device.room_id == room.room_id, Device.is_active == True
+            )
+        )
+        device = dev_result.scalars().first()
+        room_summaries.append(
+            PlantRoomSummary(
+                room_id=room.room_id,
+                room_name=room.room_name,
+                room_code=room.room_code,
+                room_type=room.room_type.value if room.room_type else "FRUITING",
+                status=room.status.value if room.status else "ACTIVE",
+                has_device=device is not None,
+                device_name=device.device_name if device else None,
+                is_online=device.is_online if device else False,
+            )
+        )
+
+    # Device counts
+    devices_q = await db.execute(
+        select(func.count(Device.device_id))
+        .join(Room, Room.room_id == Device.room_id)
+        .where(Room.plant_id == plant_id, Device.is_active == True)
+    )
+    total_devices = devices_q.scalar() or 0
+
+    online_q = await db.execute(
+        select(func.count(Device.device_id))
+        .join(Room, Room.room_id == Device.room_id)
+        .where(Room.plant_id == plant_id, Device.is_active == True, Device.is_online == True)
+    )
+    online_devices = online_q.scalar() or 0
+
+    # Alert counts
+    alerts_q = await db.execute(
+        select(func.count(Alert.alert_id))
+        .join(Device, Device.device_id == Alert.device_id)
+        .join(Room, Room.room_id == Device.room_id)
+        .where(Room.plant_id == plant_id, Alert.is_resolved == False)
+    )
+    active_alerts = alerts_q.scalar() or 0
+
+    critical_q = await db.execute(
+        select(func.count(Alert.alert_id))
+        .join(Device, Device.device_id == Alert.device_id)
+        .join(Room, Room.room_id == Device.room_id)
+        .where(
+            Room.plant_id == plant_id,
+            Alert.is_resolved == False,
+            Alert.severity == Severity.CRITICAL,
+        )
+    )
+    critical_alerts = critical_q.scalar() or 0
+
+    return PlantDashboardSummary(
+        plant_id=plant.plant_id,
+        plant_name=plant.plant_name,
+        plant_code=plant.plant_code,
+        plant_type=plant.plant_type.value if plant.plant_type else "OYSTER",
+        city=plant.city,
+        state=plant.state,
+        pincode=plant.pincode,
+        total_rooms=total_rooms,
+        total_devices=total_devices,
+        online_devices=online_devices,
+        active_alerts=active_alerts,
+        critical_alerts=critical_alerts,
+        rooms=room_summaries,
     )

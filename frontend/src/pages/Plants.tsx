@@ -1,6 +1,7 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { gsap } from 'gsap';
-import { Plus, Search, Filter, Edit2, Trash2 } from 'lucide-react';
+import { Plus, Search, Filter, Edit2, Trash2, ChevronRight, UserPlus, UserCheck } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import {
@@ -17,6 +18,7 @@ import {
   SheetTitle,
   SheetFooter,
 } from '@/components/ui/sheet';
+import { SearchableSelect } from '@/components/ui/searchable-select';
 import { StatusBadge } from '@/components/ui-custom/StatusBadge';
 import { TypeBadge } from '@/components/ui-custom/TypeBadge';
 import { EmptyState } from '@/components/ui-custom/EmptyState';
@@ -24,19 +26,22 @@ import { useApp } from '@/store/AppContext';
 import { useToast } from '@/hooks/useToast';
 import { plantService } from '@/services/plantService';
 import { mapPlant, toPlantCreate, toPlantUpdate } from '@/utils/mappers';
-import type { Plant, PlantType, PlantFormData } from '@/types';
+import { INDIA_STATES } from '@/data/indiaLocations';
+import type { Plant, PlantType, PlantFormData, NewAdminInline } from '@/types';
 
 export const Plants: React.FC = () => {
+  const navigate = useNavigate();
   const { state, dispatch } = useApp();
   const toast = useToast();
   const tableRef = useRef<HTMLDivElement>(null);
-  
+
   const [searchQuery, setSearchQuery] = useState('');
   const [typeFilter, setTypeFilter] = useState<PlantType | 'ALL'>('ALL');
   const [statusFilter, setStatusFilter] = useState<'ALL' | 'ACTIVE' | 'INACTIVE'>('ALL');
   const [isDrawerOpen, setIsDrawerOpen] = useState(false);
   const [editingPlant, setEditingPlant] = useState<Plant | null>(null);
-  
+  const [adminMode, setAdminMode] = useState<'existing' | 'new'>('existing');
+
   const [formData, setFormData] = useState<PlantFormData>({
     name: '',
     code: '',
@@ -45,11 +50,23 @@ export const Plants: React.FC = () => {
     address: '',
     city: '',
     state: '',
+    pincode: '',
     latitude: undefined,
     longitude: undefined,
     sizeSqft: undefined,
+    adminUserId: undefined,
+    newAdmin: undefined,
   });
-  
+
+  const [newAdminData, setNewAdminData] = useState<NewAdminInline>({
+    username: '',
+    email: '',
+    password: '',
+    firstName: '',
+    lastName: '',
+    mobile: '',
+  });
+
   useEffect(() => {
     if (tableRef.current) {
       gsap.fromTo(
@@ -59,21 +76,40 @@ export const Plants: React.FC = () => {
       );
     }
   }, []);
-  
-  // Filter plants
+
+  // State dropdown options
+  const stateOptions = useMemo(() =>
+    INDIA_STATES.map(s => ({ value: s.name, label: s.name })),
+    []
+  );
+
+  // City dropdown options based on selected state
+  const cityOptions = useMemo(() => {
+    const selectedState = INDIA_STATES.find(s => s.name === formData.state);
+    return (selectedState?.cities ?? []).map(c => ({ value: c, label: c }));
+  }, [formData.state]);
+
+  // Admin user options (ADMIN/SUPER_ADMIN users)
+  const adminUserOptions = useMemo(() =>
+    state.users
+      .filter(u => u.role === 'ADMIN' || u.role === 'SUPER_ADMIN')
+      .map(u => ({ value: u.id, label: `${u.firstName} ${u.lastName} (${u.username})` })),
+    [state.users]
+  );
+
   const filteredPlants = state.plants.filter(plant => {
     const matchesSearch =
       searchQuery === '' ||
       plant.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
       plant.code.toLowerCase().includes(searchQuery.toLowerCase()) ||
       plant.city.toLowerCase().includes(searchQuery.toLowerCase());
-    
+
     const matchesType = typeFilter === 'ALL' || plant.type === typeFilter;
     const matchesStatus = statusFilter === 'ALL' || plant.status === statusFilter;
-    
+
     return matchesSearch && matchesType && matchesStatus;
   });
-  
+
   const handleOpenDrawer = (plant?: Plant) => {
     if (plant) {
       setEditingPlant(plant);
@@ -85,12 +121,16 @@ export const Plants: React.FC = () => {
         address: plant.address || '',
         city: plant.city,
         state: plant.state,
+        pincode: plant.pincode || '',
         latitude: plant.latitude,
         longitude: plant.longitude,
         sizeSqft: plant.sizeSqft,
+        adminUserId: undefined,
+        newAdmin: undefined,
       });
     } else {
       setEditingPlant(null);
+      setAdminMode('existing');
       setFormData({
         name: '',
         code: '',
@@ -99,18 +139,47 @@ export const Plants: React.FC = () => {
         address: '',
         city: '',
         state: '',
+        pincode: '',
         latitude: undefined,
         longitude: undefined,
         sizeSqft: undefined,
+        adminUserId: undefined,
+        newAdmin: undefined,
+      });
+      setNewAdminData({
+        username: '',
+        email: '',
+        password: '',
+        firstName: '',
+        lastName: '',
+        mobile: '',
       });
     }
     setIsDrawerOpen(true);
   };
-  
+
   const handleSave = async () => {
-    if (!formData.name || !formData.code || !formData.city || !formData.state) {
-      toast.error('Please fill in all required fields');
+    if (!formData.name || !formData.code || !formData.city || !formData.state || !formData.pincode) {
+      toast.error('Please fill in all required fields (name, code, city, state, pincode)');
       return;
+    }
+    if (!/^\d{6}$/.test(formData.pincode)) {
+      toast.error('Pincode must be exactly 6 digits');
+      return;
+    }
+
+    // Admin validation only for CREATE
+    if (!editingPlant) {
+      if (adminMode === 'existing' && !formData.adminUserId) {
+        toast.error('Please select an admin user');
+        return;
+      }
+      if (adminMode === 'new') {
+        if (!newAdminData.username || !newAdminData.email || !newAdminData.password || !newAdminData.firstName || !newAdminData.lastName) {
+          toast.error('Please fill in all required admin fields');
+          return;
+        }
+      }
     }
 
     try {
@@ -119,7 +188,12 @@ export const Plants: React.FC = () => {
         dispatch({ type: 'UPDATE_PLANT', payload: mapPlant(res) });
         toast.success('Plant updated successfully');
       } else {
-        const res = await plantService.create(toPlantCreate(formData));
+        const createData = {
+          ...formData,
+          newAdmin: adminMode === 'new' ? newAdminData : undefined,
+          adminUserId: adminMode === 'existing' ? formData.adminUserId : undefined,
+        };
+        const res = await plantService.create(toPlantCreate(createData));
         dispatch({ type: 'ADD_PLANT', payload: mapPlant(res) });
         toast.success('Plant created successfully');
       }
@@ -138,7 +212,7 @@ export const Plants: React.FC = () => {
       toast.error(err?.response?.data?.detail || 'Failed to delete plant');
     }
   };
-  
+
   return (
     <div className="space-y-6">
       {/* Header */}
@@ -155,7 +229,7 @@ export const Plants: React.FC = () => {
           New Plant
         </Button>
       </div>
-      
+
       {/* Filters */}
       <div className="flex flex-wrap items-center gap-3">
         <div className="relative flex-1 min-w-[200px] max-w-sm">
@@ -168,7 +242,7 @@ export const Plants: React.FC = () => {
             className="input-dark pl-10 w-full"
           />
         </div>
-        
+
         <Select value={typeFilter} onValueChange={(v) => setTypeFilter(v as PlantType | 'ALL')}>
           <SelectTrigger className="input-dark w-40">
             <Filter className="w-4 h-4 mr-2" />
@@ -182,7 +256,7 @@ export const Plants: React.FC = () => {
             <SelectItem value="MIXED">Mixed</SelectItem>
           </SelectContent>
         </Select>
-        
+
         <Select value={statusFilter} onValueChange={(v) => setStatusFilter(v as typeof statusFilter)}>
           <SelectTrigger className="input-dark w-40">
             <SelectValue placeholder="Status" />
@@ -194,7 +268,7 @@ export const Plants: React.FC = () => {
           </SelectContent>
         </Select>
       </div>
-      
+
       {/* Table */}
       {filteredPlants.length > 0 ? (
         <div
@@ -210,6 +284,7 @@ export const Plants: React.FC = () => {
                   <th>Type</th>
                   <th>City</th>
                   <th>State</th>
+                  <th>Pincode</th>
                   <th>Rooms</th>
                   <th>Status</th>
                   <th>Created</th>
@@ -218,7 +293,11 @@ export const Plants: React.FC = () => {
               </thead>
               <tbody>
                 {filteredPlants.map((plant) => (
-                  <tr key={plant.id} className="cursor-pointer hover:bg-iot-tertiary/30">
+                  <tr
+                    key={plant.id}
+                    className="cursor-pointer hover:bg-iot-tertiary/30"
+                    onClick={() => navigate(`/plants/${plant.id}`)}
+                  >
                     <td className="font-medium">{plant.name}</td>
                     <td className="font-mono text-iot-secondary">{plant.code}</td>
                     <td>
@@ -226,6 +305,7 @@ export const Plants: React.FC = () => {
                     </td>
                     <td>{plant.city}</td>
                     <td>{plant.state}</td>
+                    <td className="font-mono">{plant.pincode || '-'}</td>
                     <td>{plant.roomsCount}</td>
                     <td>
                       <StatusBadge status={plant.status === 'ACTIVE' ? 'active' : 'inactive'} />
@@ -234,7 +314,7 @@ export const Plants: React.FC = () => {
                       {new Date(plant.createdAt).toLocaleDateString()}
                     </td>
                     <td>
-                      <div className="flex items-center gap-2">
+                      <div className="flex items-center gap-2" onClick={(e) => e.stopPropagation()}>
                         <button
                           onClick={() => handleOpenDrawer(plant)}
                           className="p-1.5 rounded-lg text-iot-secondary hover:text-iot-cyan hover:bg-iot-cyan/10 transition-colors"
@@ -246,6 +326,12 @@ export const Plants: React.FC = () => {
                           className="p-1.5 rounded-lg text-iot-secondary hover:text-iot-red hover:bg-iot-red/10 transition-colors"
                         >
                           <Trash2 className="w-4 h-4" />
+                        </button>
+                        <button
+                          onClick={() => navigate(`/plants/${plant.id}`)}
+                          className="p-1.5 rounded-lg text-iot-secondary hover:text-iot-primary hover:bg-iot-tertiary transition-colors"
+                        >
+                          <ChevronRight className="w-4 h-4" />
                         </button>
                       </div>
                     </td>
@@ -264,7 +350,7 @@ export const Plants: React.FC = () => {
           onAction={() => handleOpenDrawer()}
         />
       )}
-      
+
       {/* Create/Edit Drawer */}
       <Sheet open={isDrawerOpen} onOpenChange={setIsDrawerOpen}>
         <SheetContent className="bg-iot-secondary border-iot-subtle w-full sm:max-w-lg overflow-y-auto">
@@ -273,7 +359,7 @@ export const Plants: React.FC = () => {
               {editingPlant ? 'Edit Plant' : 'Create New Plant'}
             </SheetTitle>
           </SheetHeader>
-          
+
           <div className="space-y-4 py-6">
             <div>
               <label className="block text-xs font-medium uppercase tracking-wider text-iot-secondary mb-2">
@@ -287,7 +373,7 @@ export const Plants: React.FC = () => {
                 className="input-dark w-full"
               />
             </div>
-            
+
             <div>
               <label className="block text-xs font-medium uppercase tracking-wider text-iot-secondary mb-2">
                 Plant Code *
@@ -300,7 +386,7 @@ export const Plants: React.FC = () => {
                 className="input-dark w-full"
               />
             </div>
-            
+
             <div>
               <label className="block text-xs font-medium uppercase tracking-wider text-iot-secondary mb-2">
                 Type *
@@ -320,7 +406,7 @@ export const Plants: React.FC = () => {
                 </SelectContent>
               </Select>
             </div>
-            
+
             <div>
               <label className="block text-xs font-medium uppercase tracking-wider text-iot-secondary mb-2">
                 Location
@@ -333,7 +419,7 @@ export const Plants: React.FC = () => {
                 className="input-dark w-full"
               />
             </div>
-            
+
             <div>
               <label className="block text-xs font-medium uppercase tracking-wider text-iot-secondary mb-2">
                 Address
@@ -346,34 +432,55 @@ export const Plants: React.FC = () => {
                 className="input-dark w-full"
               />
             </div>
-            
+
+            {/* State/City Cascading Dropdowns */}
             <div className="grid grid-cols-2 gap-4">
-              <div>
-                <label className="block text-xs font-medium uppercase tracking-wider text-iot-secondary mb-2">
-                  City *
-                </label>
-                <Input
-                  type="text"
-                  value={formData.city}
-                  onChange={(e) => setFormData({ ...formData, city: e.target.value })}
-                  placeholder="City"
-                  className="input-dark w-full"
-                />
-              </div>
               <div>
                 <label className="block text-xs font-medium uppercase tracking-wider text-iot-secondary mb-2">
                   State *
                 </label>
-                <Input
-                  type="text"
+                <SearchableSelect
+                  options={stateOptions}
                   value={formData.state}
-                  onChange={(e) => setFormData({ ...formData, state: e.target.value })}
-                  placeholder="State"
-                  className="input-dark w-full"
+                  onValueChange={(v) => setFormData({ ...formData, state: v, city: '' })}
+                  placeholder="Select state"
+                  searchPlaceholder="Search states..."
+                  emptyText="No states found."
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-medium uppercase tracking-wider text-iot-secondary mb-2">
+                  City *
+                </label>
+                <SearchableSelect
+                  options={cityOptions}
+                  value={formData.city}
+                  onValueChange={(v) => setFormData({ ...formData, city: v })}
+                  placeholder="Select city"
+                  searchPlaceholder="Search cities..."
+                  emptyText={formData.state ? "No cities found." : "Select a state first."}
+                  disabled={!formData.state}
                 />
               </div>
             </div>
-            
+
+            <div>
+              <label className="block text-xs font-medium uppercase tracking-wider text-iot-secondary mb-2">
+                Pincode *
+              </label>
+              <Input
+                type="text"
+                value={formData.pincode}
+                onChange={(e) => {
+                  const v = e.target.value.replace(/\D/g, '').slice(0, 6);
+                  setFormData({ ...formData, pincode: v });
+                }}
+                placeholder="6-digit pincode"
+                maxLength={6}
+                className="input-dark w-full font-mono"
+              />
+            </div>
+
             <div className="grid grid-cols-2 gap-4">
               <div>
                 <label className="block text-xs font-medium uppercase tracking-wider text-iot-secondary mb-2">
@@ -400,7 +507,7 @@ export const Plants: React.FC = () => {
                 />
               </div>
             </div>
-            
+
             <div>
               <label className="block text-xs font-medium uppercase tracking-wider text-iot-secondary mb-2">
                 Size (sq ft)
@@ -413,8 +520,128 @@ export const Plants: React.FC = () => {
                 className="input-dark w-full"
               />
             </div>
+
+            {/* Admin Section - Only for CREATE */}
+            {!editingPlant && (
+              <div className="border-t border-iot-subtle pt-4 mt-4">
+                <h3 className="text-sm font-semibold text-iot-primary mb-3">Plant Admin *</h3>
+                <div className="flex gap-2 mb-4">
+                  <Button
+                    variant={adminMode === 'existing' ? 'default' : 'outline'}
+                    size="sm"
+                    onClick={() => setAdminMode('existing')}
+                    className={adminMode === 'existing' ? 'gradient-primary text-iot-bg-primary' : 'border-iot-subtle text-iot-secondary'}
+                  >
+                    <UserCheck className="w-4 h-4 mr-1" />
+                    Existing User
+                  </Button>
+                  <Button
+                    variant={adminMode === 'new' ? 'default' : 'outline'}
+                    size="sm"
+                    onClick={() => setAdminMode('new')}
+                    className={adminMode === 'new' ? 'gradient-primary text-iot-bg-primary' : 'border-iot-subtle text-iot-secondary'}
+                  >
+                    <UserPlus className="w-4 h-4 mr-1" />
+                    New Admin
+                  </Button>
+                </div>
+
+                {adminMode === 'existing' ? (
+                  <div>
+                    <label className="block text-xs font-medium uppercase tracking-wider text-iot-secondary mb-2">
+                      Select Admin User *
+                    </label>
+                    <SearchableSelect
+                      options={adminUserOptions}
+                      value={formData.adminUserId || ''}
+                      onValueChange={(v) => setFormData({ ...formData, adminUserId: v })}
+                      placeholder="Search admin users..."
+                      searchPlaceholder="Search by name..."
+                      emptyText="No admin users found."
+                    />
+                  </div>
+                ) : (
+                  <div className="space-y-3">
+                    <div className="grid grid-cols-2 gap-3">
+                      <div>
+                        <label className="block text-xs font-medium uppercase tracking-wider text-iot-secondary mb-1">
+                          First Name *
+                        </label>
+                        <Input
+                          type="text"
+                          value={newAdminData.firstName}
+                          onChange={(e) => setNewAdminData({ ...newAdminData, firstName: e.target.value })}
+                          placeholder="First name"
+                          className="input-dark w-full"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-xs font-medium uppercase tracking-wider text-iot-secondary mb-1">
+                          Last Name *
+                        </label>
+                        <Input
+                          type="text"
+                          value={newAdminData.lastName}
+                          onChange={(e) => setNewAdminData({ ...newAdminData, lastName: e.target.value })}
+                          placeholder="Last name"
+                          className="input-dark w-full"
+                        />
+                      </div>
+                    </div>
+                    <div>
+                      <label className="block text-xs font-medium uppercase tracking-wider text-iot-secondary mb-1">
+                        Username *
+                      </label>
+                      <Input
+                        type="text"
+                        value={newAdminData.username}
+                        onChange={(e) => setNewAdminData({ ...newAdminData, username: e.target.value })}
+                        placeholder="Username"
+                        className="input-dark w-full"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-medium uppercase tracking-wider text-iot-secondary mb-1">
+                        Email *
+                      </label>
+                      <Input
+                        type="email"
+                        value={newAdminData.email}
+                        onChange={(e) => setNewAdminData({ ...newAdminData, email: e.target.value })}
+                        placeholder="Email"
+                        className="input-dark w-full"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-medium uppercase tracking-wider text-iot-secondary mb-1">
+                        Password *
+                      </label>
+                      <Input
+                        type="password"
+                        value={newAdminData.password}
+                        onChange={(e) => setNewAdminData({ ...newAdminData, password: e.target.value })}
+                        placeholder="Password"
+                        className="input-dark w-full"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-medium uppercase tracking-wider text-iot-secondary mb-1">
+                        Mobile
+                      </label>
+                      <Input
+                        type="text"
+                        value={newAdminData.mobile || ''}
+                        onChange={(e) => setNewAdminData({ ...newAdminData, mobile: e.target.value })}
+                        placeholder="Mobile number"
+                        className="input-dark w-full"
+                      />
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
           </div>
-          
+
           <SheetFooter className="gap-3">
             <Button
               variant="outline"

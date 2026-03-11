@@ -19,6 +19,7 @@ from app.api.firmware import router as firmware_router
 from app.api.harvests import router as harvests_router
 from app.api.growth_cycles import router as growth_cycles_router
 from app.api.climate_advisory import router as climate_advisory_router
+from app.api.inquiries import router as inquiries_router
 
 api_router = APIRouter()
 api_router.include_router(auth_router, prefix="/auth", tags=["Authentication"])
@@ -40,3 +41,4 @@ api_router.include_router(firmware_router, prefix="/firmware", tags=["Firmware O
 api_router.include_router(harvests_router, prefix="/harvests", tags=["Harvests"])
 api_router.include_router(growth_cycles_router, prefix="/growth-cycles", tags=["Growth Cycles"])
 api_router.include_router(climate_advisory_router, prefix="/advisory", tags=["Climate Advisory"])
+api_router.include_router(inquiries_router, prefix="/inquiries", tags=["Inquiries"])

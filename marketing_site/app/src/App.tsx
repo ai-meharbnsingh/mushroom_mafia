@@ -69,9 +69,11 @@ function Navigation() {
             <Button variant="ghost" className="text-slate-300 hover:text-white">
               Login
             </Button>
-            <Button className="bg-gradient-to-r from-cyan-500 to-green-500 hover:from-cyan-400 hover:to-green-400 text-white">
-              Request Demo
-            </Button>
+            <Link to="/contact?type=demo">
+              <Button className="bg-gradient-to-r from-cyan-500 to-green-500 hover:from-cyan-400 hover:to-green-400 text-white">
+                Request Demo
+              </Button>
+            </Link>
           </div>
 
           {/* Mobile Menu Button */}
@@ -104,9 +106,11 @@ function Navigation() {
                   {link.name}
                 </a>
               ))}
-              <Button className="w-full bg-gradient-to-r from-cyan-500 to-green-500 text-white mt-4">
-                Request Demo
-              </Button>
+              <Link to="/contact?type=demo" onClick={() => setIsMobileMenuOpen(false)}>
+                <Button className="w-full bg-gradient-to-r from-cyan-500 to-green-500 text-white mt-4">
+                  Request Demo
+                </Button>
+              </Link>
             </div>
           </motion.div>
         )}
@@ -190,20 +194,24 @@ function HeroSection() {
               transition={{ delay: 0.5, duration: 0.8 }}
               className="flex flex-col sm:flex-row gap-4 justify-center lg:justify-start"
             >
-              <Button
-                size="lg"
-                className="bg-gradient-to-r from-cyan-500 to-green-500 hover:from-cyan-400 hover:to-green-400 text-white px-8 py-6 text-lg glow-cyan"
-              >
-                Request a Demo
-                <ArrowRight className="ml-2 w-5 h-5" />
-              </Button>
-              <Button
-                size="lg"
-                variant="outline"
-                className="border-cyan-500/50 text-cyan-400 hover:bg-cyan-500/10 px-8 py-6 text-lg"
-              >
-                See Pricing
-              </Button>
+              <Link to="/contact?type=demo">
+                <Button
+                  size="lg"
+                  className="bg-gradient-to-r from-cyan-500 to-green-500 hover:from-cyan-400 hover:to-green-400 text-white px-8 py-6 text-lg glow-cyan"
+                >
+                  Request a Demo
+                  <ArrowRight className="ml-2 w-5 h-5" />
+                </Button>
+              </Link>
+              <a href="/#pricing">
+                <Button
+                  size="lg"
+                  variant="outline"
+                  className="border-cyan-500/50 text-cyan-400 hover:bg-cyan-500/10 px-8 py-6 text-lg"
+                >
+                  See Pricing
+                </Button>
+              </a>
             </motion.div>
 
 
@@ -749,6 +757,7 @@ function PricingSection() {
       ],
       note: 'Hobbyist grade sensors',
       cta: 'Buy Starter Kit',
+      ctaHref: '/contact?type=trial',
       highlighted: false,
     },
     {
@@ -767,6 +776,7 @@ function PricingSection() {
         '24/7 dedicated support team',
       ],
       cta: 'Request Enterprise Demo',
+      ctaHref: '/contact?type=enterprise',
       highlighted: true,
     },
   ];
@@ -835,14 +845,16 @@ function PricingSection() {
                   ))}
                 </ul>
 
-                <Button
-                  className={`w-full ${plan.highlighted
-                    ? 'bg-gradient-to-r from-cyan-500 to-green-500 hover:from-cyan-400 hover:to-green-400 text-white'
-                    : 'bg-slate-800 hover:bg-slate-700 text-white'
-                    }`}
-                >
-                  {plan.cta}
-                </Button>
+                <Link to={plan.ctaHref}>
+                  <Button
+                    className={`w-full ${plan.highlighted
+                      ? 'bg-gradient-to-r from-cyan-500 to-green-500 hover:from-cyan-400 hover:to-green-400 text-white'
+                      : 'bg-slate-800 hover:bg-slate-700 text-white'
+                      }`}
+                  >
+                    {plan.cta}
+                  </Button>
+                </Link>
               </div>
             </motion.div>
           ))}
@@ -882,21 +894,25 @@ function FinalCTASection() {
           </p>
 
           <div className="flex flex-col sm:flex-row gap-4 justify-center">
-            <Button
-              size="lg"
-              className="bg-gradient-to-r from-cyan-500 to-green-500 hover:from-cyan-400 hover:to-green-400 text-white px-10 py-7 text-lg glow-cyan"
-            >
-              Start Your Free 14-Day Trial
-              <ArrowRight className="ml-2 w-5 h-5" />
-            </Button>
-            <Button
-              size="lg"
-              variant="outline"
-              className="border-slate-600 text-slate-300 hover:bg-slate-800 px-10 py-7 text-lg"
-            >
-              <Users className="mr-2 w-5 h-5" />
-              Contact Sales
-            </Button>
+            <Link to="/contact?type=trial">
+              <Button
+                size="lg"
+                className="bg-gradient-to-r from-cyan-500 to-green-500 hover:from-cyan-400 hover:to-green-400 text-white px-10 py-7 text-lg glow-cyan"
+              >
+                Start Your Free 14-Day Trial
+                <ArrowRight className="ml-2 w-5 h-5" />
+              </Button>
+            </Link>
+            <Link to="/contact?type=sales">
+              <Button
+                size="lg"
+                variant="outline"
+                className="border-slate-600 text-slate-300 hover:bg-slate-800 px-10 py-7 text-lg"
+              >
+                <Users className="mr-2 w-5 h-5" />
+                Contact Sales
+              </Button>
+            </Link>
           </div>
 
           <div className="mt-12 flex items-center justify-center gap-8 text-slate-500">

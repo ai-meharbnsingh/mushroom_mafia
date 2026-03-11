@@ -68,3 +68,30 @@ class AdminDashboardSummary(BaseModel):
     alerts: AlertSummaryBreakdown
     plants: list[PlantOverview]
     recent_events: list[RecentDeviceEvent]
+
+
+class PlantRoomSummary(BaseModel):
+    room_id: int
+    room_name: str
+    room_code: str
+    room_type: str
+    status: str
+    has_device: bool
+    device_name: str | None = None
+    is_online: bool = False
+
+
+class PlantDashboardSummary(BaseModel):
+    plant_id: int
+    plant_name: str
+    plant_code: str
+    plant_type: str
+    city: str | None = None
+    state: str | None = None
+    pincode: str | None = None
+    total_rooms: int
+    total_devices: int
+    online_devices: int
+    active_alerts: int
+    critical_alerts: int
+    rooms: list[PlantRoomSummary]
