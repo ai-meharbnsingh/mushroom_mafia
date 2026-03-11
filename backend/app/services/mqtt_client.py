@@ -22,7 +22,7 @@ class MQTTManager:
         tls_context = None
         if getattr(settings, "MQTT_USE_TLS", False):
             import ssl
-            tls_context = ssl.create_default_context(cafile=settings.MQTT_CA_CERTS)
+            tls_context = ssl.create_default_context()
 
         while self._running:
             try:
