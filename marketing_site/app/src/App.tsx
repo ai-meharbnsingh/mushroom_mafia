@@ -1,10 +1,10 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   Menu, X, Thermometer, Droplets, Wind, Shield,
   TrendingUp, Cpu, RefreshCw, Users, Building2,
   FlaskConical, Check, ArrowRight, Sparkles, Wifi, Bell,
-  BarChart3, Globe, Database, Server
+  BarChart3, Globe, Database, Server, Play, Pause, Volume2, VolumeX
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -40,7 +40,7 @@ function Navigation() {
             className="flex items-center gap-4"
             whileHover={{ scale: 1.02 }}
           >
-            <img src="/logo.png" alt="Mushroom Ki Mandi Logo" className="w-30 h-30" />
+            <img src="/logo.png" alt="Mushroom Ki Mandi Logo" className="w-12 h-12" />
             <span className="text-white text-2xl font-semibold">Mushroom Ki Mandi</span>
           </motion.div>
 
@@ -255,6 +255,108 @@ function HeroSection() {
             </div>
           </motion.div>
         </div>
+      </div>
+    </section>
+  );
+}
+
+// Demo Video Section
+function DemoVideoSection() {
+  const [isPlaying, setIsPlaying] = useState(true);
+  const [isMuted, setIsMuted] = useState(true);
+  const videoRef = useRef<HTMLVideoElement>(null);
+
+  const togglePlay = () => {
+    if (videoRef.current) {
+      if (isPlaying) {
+        videoRef.current.pause();
+      } else {
+        videoRef.current.play();
+      }
+      setIsPlaying(!isPlaying);
+    }
+  };
+
+  const toggleMute = () => {
+    if (videoRef.current) {
+      videoRef.current.muted = !isMuted;
+      setIsMuted(!isMuted);
+    }
+  };
+
+  return (
+    <section className="relative py-24 overflow-hidden">
+      <div className="absolute inset-0 bg-gradient-to-b from-transparent via-cyan-500/5 to-transparent" />
+
+      <div className="relative max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+        <motion.div
+          initial={{ opacity: 0, y: 30 }}
+          whileInView={{ opacity: 1, y: 0 }}
+          viewport={{ once: true }}
+          className="text-center mb-12"
+        >
+          <Badge className="mb-4 bg-cyan-500/20 text-cyan-400 border-cyan-500/30">
+            See It In Action
+          </Badge>
+          <h2 className="text-3xl sm:text-4xl lg:text-5xl font-bold text-white mb-4">
+            From Sensor to <span className="text-gradient">Harvest</span>
+          </h2>
+          <p className="text-slate-400 max-w-2xl mx-auto">
+            Watch how our platform monitors every stage of the mushroom growth cycle — from installation to yield tracking.
+          </p>
+        </motion.div>
+
+        <motion.div
+          initial={{ opacity: 0, y: 40 }}
+          whileInView={{ opacity: 1, y: 0 }}
+          viewport={{ once: true }}
+          transition={{ duration: 0.8 }}
+          className="relative max-w-5xl mx-auto"
+        >
+          {/* Video Container */}
+          <div className="relative rounded-2xl overflow-hidden ring-1 ring-white/10 shadow-2xl shadow-cyan-500/10">
+            <video
+              ref={videoRef}
+              className="w-full h-auto"
+              autoPlay
+              loop
+              muted
+              playsInline
+            >
+              <source src="/demo-video.mp4" type="video/mp4" />
+            </video>
+
+            {/* Gradient overlay at bottom for controls */}
+            <div className="absolute bottom-0 left-0 right-0 h-24 bg-gradient-to-t from-black/60 to-transparent" />
+
+            {/* Video Controls */}
+            <div className="absolute bottom-4 left-4 right-4 flex items-center justify-between">
+              <button
+                onClick={togglePlay}
+                className="w-10 h-10 rounded-full bg-white/10 backdrop-blur-sm flex items-center justify-center hover:bg-white/20 transition-colors"
+              >
+                {isPlaying ? (
+                  <Pause className="w-5 h-5 text-white" />
+                ) : (
+                  <Play className="w-5 h-5 text-white ml-0.5" />
+                )}
+              </button>
+              <button
+                onClick={toggleMute}
+                className="w-10 h-10 rounded-full bg-white/10 backdrop-blur-sm flex items-center justify-center hover:bg-white/20 transition-colors"
+              >
+                {isMuted ? (
+                  <VolumeX className="w-5 h-5 text-white" />
+                ) : (
+                  <Volume2 className="w-5 h-5 text-white" />
+                )}
+              </button>
+            </div>
+          </div>
+
+          {/* Decorative glow behind video */}
+          <div className="absolute -inset-4 bg-gradient-to-r from-cyan-500/20 via-transparent to-green-500/20 rounded-3xl blur-2xl -z-10" />
+        </motion.div>
       </div>
     </section>
   );
@@ -889,6 +991,7 @@ function App() {
       <Navigation />
       <main>
         <HeroSection />
+        <DemoVideoSection />
         <ProblemSolutionSection />
         <FeaturesSection />
         <HowItWorksSection />
