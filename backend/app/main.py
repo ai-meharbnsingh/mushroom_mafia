@@ -17,27 +17,41 @@ logger = logging.getLogger(__name__)
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    await init_redis()
-    await FastAPILimiter.init(redis_client_module.redis_client)
-    # Start MQTT client in background
-    mqtt_task = asyncio.create_task(mqtt_manager.start())
-    logger.info("MQTT client starting...")
-    # Start relay scheduler in background
-    scheduler_task = asyncio.create_task(run_relay_scheduler())
-    logger.info("Relay scheduler starting...")
+    # Redis (optional — graceful fallback if unavailable)
+    try:
+        await init_redis()
+        await FastAPILimiter.init(redis_client_module.redis_client)
+        logger.info("Redis connected")
+    except Exception as e:
+        logger.warning(f"Redis unavailable, rate limiting disabled: {e}")
+
+    # MQTT client (optional — graceful fallback if unavailable)
+    mqtt_task = None
+    scheduler_task = None
+    try:
+        mqtt_task = asyncio.create_task(mqtt_manager.start())
+        logger.info("MQTT client starting...")
+        scheduler_task = asyncio.create_task(run_relay_scheduler())
+        logger.info("Relay scheduler starting...")
+    except Exception as e:
+        logger.warning(f"MQTT unavailable: {e}")
+
     yield
+
     # Shutdown
-    await mqtt_manager.stop()
-    mqtt_task.cancel()
-    scheduler_task.cancel()
-    try:
-        await mqtt_task
-    except asyncio.CancelledError:
-        pass
-    try:
-        await scheduler_task
-    except asyncio.CancelledError:
-        pass
+    if mqtt_task:
+        await mqtt_manager.stop()
+        mqtt_task.cancel()
+        try:
+            await mqtt_task
+        except asyncio.CancelledError:
+            pass
+    if scheduler_task:
+        scheduler_task.cancel()
+        try:
+            await scheduler_task
+        except asyncio.CancelledError:
+            pass
     await close_redis()
 
 
