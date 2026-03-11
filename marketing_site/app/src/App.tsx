@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
+import { Routes, Route, Link, useLocation } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   Menu, X, Thermometer, Droplets, Wind, Shield,
@@ -8,6 +9,11 @@ import {
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
+import Privacy from '@/pages/Privacy';
+import Terms from '@/pages/Terms';
+import About from '@/pages/About';
+import Blog from '@/pages/Blog';
+import Contact from '@/pages/Contact';
 
 // Navigation Component
 function Navigation() {
@@ -36,13 +42,15 @@ function Navigation() {
     >
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="flex items-center justify-between">
-          <motion.div
-            className="flex items-center gap-4"
-            whileHover={{ scale: 1.02 }}
-          >
-            <img src="/logo.png" alt="Mushroom Ki Mandi Logo" className="w-12 h-12" />
-            <span className="text-white text-2xl font-semibold">Mushroom Ki Mandi</span>
-          </motion.div>
+          <Link to="/">
+            <motion.div
+              className="flex items-center gap-4"
+              whileHover={{ scale: 1.02 }}
+            >
+              <img src="/logo.png" alt="Mushroom Ki Mandi Logo" className="w-12 h-12" />
+              <span className="text-white text-2xl font-semibold">Mushroom Ki Mandi</span>
+            </motion.div>
+          </Link>
 
           {/* Desktop Navigation */}
           <div className="hidden md:flex items-center gap-8">
@@ -914,23 +922,33 @@ function FinalCTASection() {
 // Footer
 function Footer() {
   const footerLinks = {
-    Product: ['Features', 'Pricing', 'Integrations', 'API Docs'],
-    Company: ['About', 'Blog', 'Careers', 'Contact'],
-    Resources: ['Documentation', 'Tutorials', 'Support', 'Community'],
-    Legal: ['Privacy', 'Terms', 'Security', 'Cookies'],
+    Product: [
+      { name: 'Features', href: '/#features' },
+      { name: 'Pricing', href: '/#pricing' },
+      { name: 'How It Works', href: '/#how-it-works' },
+    ],
+    Company: [
+      { name: 'About', href: '/about' },
+      { name: 'Blog', href: '/blog' },
+      { name: 'Contact', href: '/contact' },
+    ],
+    Legal: [
+      { name: 'Privacy Policy', href: '/privacy' },
+      { name: 'Terms of Service', href: '/terms' },
+    ],
   };
 
   return (
     <footer className="relative py-16 border-t border-slate-800">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-        <div className="grid md:grid-cols-2 lg:grid-cols-6 gap-12 mb-12">
+        <div className="grid md:grid-cols-2 lg:grid-cols-5 gap-12 mb-12">
           <div className="lg:col-span-2">
-            <div className="flex items-center gap-2 mb-4">
+            <Link to="/" className="flex items-center gap-2 mb-4">
               <div className="h-12 w-12 sm:h-14 sm:w-14 flex-shrink-0 overflow-hidden">
                 <img src="/logo.png" alt="Mushroom Ki Mandi Logo" className="h-[180%] w-[180%] object-contain -mt-[10%] -ml-[15%]" />
               </div>
               <span className="text-2xl font-bold text-white tracking-tight">Mushroom Ki Mandi</span>
-            </div>
+            </Link>
             <p className="text-slate-400 mb-6 max-w-sm">
               The foundational operating system for the Global Mushroom Mandi Network.
               Precision climate control for commercial mushroom farming.
@@ -954,10 +972,16 @@ function Footer() {
               <h4 className="text-white font-semibold mb-4">{category}</h4>
               <ul className="space-y-3">
                 {links.map((link) => (
-                  <li key={link}>
-                    <a href="#" className="text-slate-400 hover:text-cyan-400 transition-colors text-sm">
-                      {link}
-                    </a>
+                  <li key={link.name}>
+                    {link.href.startsWith('/#') ? (
+                      <a href={link.href} className="text-slate-400 hover:text-cyan-400 transition-colors text-sm">
+                        {link.name}
+                      </a>
+                    ) : (
+                      <Link to={link.href} className="text-slate-400 hover:text-cyan-400 transition-colors text-sm">
+                        {link.name}
+                      </Link>
+                    )}
                   </li>
                 ))}
               </ul>
@@ -968,7 +992,7 @@ function Footer() {
         <div className="pt-8 border-t border-slate-800 flex flex-col md:flex-row justify-between items-center gap-4">
           <div className="flex flex-col gap-2">
             <p className="text-slate-500 text-sm">
-              © 2024 Mushroom Ki Mandi. All rights reserved. Silicon Valley meets Advanced Agriculture.
+              © 2026 Mushroom Ki Mandi. All rights reserved. Silicon Valley meets Advanced Agriculture.
             </p>
             <p className="text-slate-600 text-xs text-center md:text-left">
               Visit us at: <a href="https://mushroomkimandi.com" className="hover:text-cyan-400">mushroomkimandi.com</a> | <a href="https://mushroomkimandi.in" className="hover:text-cyan-400">.in</a> | <a href="https://mushroomkimandi.online" className="hover:text-cyan-400">.online</a>
@@ -984,20 +1008,46 @@ function Footer() {
   );
 }
 
+// Scroll to top on route change
+function ScrollToTop() {
+  const { pathname } = useLocation();
+  useEffect(() => {
+    window.scrollTo(0, 0);
+  }, [pathname]);
+  return null;
+}
+
+// Home page (landing)
+function HomePage() {
+  return (
+    <>
+      <HeroSection />
+      <DemoVideoSection />
+      <ProblemSolutionSection />
+      <FeaturesSection />
+      <HowItWorksSection />
+      <TargetAudienceSection />
+      <PricingSection />
+      <FinalCTASection />
+    </>
+  );
+}
+
 // Main App
 function App() {
   return (
     <div className="min-h-screen bg-background text-foreground">
+      <ScrollToTop />
       <Navigation />
       <main>
-        <HeroSection />
-        <DemoVideoSection />
-        <ProblemSolutionSection />
-        <FeaturesSection />
-        <HowItWorksSection />
-        <TargetAudienceSection />
-        <PricingSection />
-        <FinalCTASection />
+        <Routes>
+          <Route path="/" element={<HomePage />} />
+          <Route path="/privacy" element={<Privacy />} />
+          <Route path="/terms" element={<Terms />} />
+          <Route path="/about" element={<About />} />
+          <Route path="/blog" element={<Blog />} />
+          <Route path="/contact" element={<Contact />} />
+        </Routes>
       </main>
       <Footer />
     </div>

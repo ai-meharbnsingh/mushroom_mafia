@@ -42,22 +42,33 @@ button:disabled{background:#555;}
 function scan(){
  document.getElementById('scanBtn').disabled=true;
  document.getElementById('scanBtn').textContent='Scanning...';
- document.getElementById('status').textContent='';
+ document.getElementById('status').textContent='Searching for networks...';
  fetch('/scan').then(r=>r.json()).then(d=>{
-  var h='';
-  d.forEach(function(n){
-   var bars=n.rssi>-50?'****':n.rssi>-65?'***':n.rssi>-75?'**':'*';
-   var lk=n.secure?'<span class="lock">&#128274;</span>':'';
-   h+='<div class="card" onclick="pick(\''+n.ssid.replace(/'/g,"\\'")+'\')"><span class="ssid">'+lk+n.ssid+'</span><span class="signal">'+bars+' '+n.rssi+'dBm</span></div>';
-  });
-  document.getElementById('nets').innerHTML=h||'<p>No networks found</p>';
-  document.getElementById('scanBtn').disabled=false;
-  document.getElementById('scanBtn').textContent='Scan Networks';
- }).catch(function(){
-  document.getElementById('status').textContent='Scan failed';
+  if(d.scanning){setTimeout(pollScan,2000);return;}
+  showResults(d);
+ }).catch(function(e){
+  document.getElementById('status').textContent='Scan failed: '+e.message+'. Tap to retry.';
   document.getElementById('scanBtn').disabled=false;
   document.getElementById('scanBtn').textContent='Scan Networks';
  });
+}
+function pollScan(){
+ fetch('/scan').then(r=>r.json()).then(d=>{
+  if(d.scanning){setTimeout(pollScan,1500);return;}
+  showResults(d);
+ }).catch(function(){setTimeout(pollScan,2000);});
+}
+function showResults(d){
+ var h='';
+ d.forEach(function(n){
+  var bars=n.rssi>-50?'****':n.rssi>-65?'***':n.rssi>-75?'**':'*';
+  var lk=n.secure?'<span class="lock">&#128274;</span>':'';
+  h+='<div class="card" onclick="pick(\''+n.ssid.replace(/'/g,"\\'")+'\')"><span class="ssid">'+lk+n.ssid+'</span><span class="signal">'+bars+' '+n.rssi+'dBm</span></div>';
+ });
+ document.getElementById('nets').innerHTML=h||'<p>No networks found. Tap Scan again.</p>';
+ document.getElementById('status').textContent=d.length+' network(s) found';
+ document.getElementById('scanBtn').disabled=false;
+ document.getElementById('scanBtn').textContent='Scan Networks';
 }
 function pick(s){
  document.getElementById('ssid').value=s;

@@ -617,16 +617,25 @@ MQTT is optional. If the broker is unreachable at startup, the backend logs a wa
 
 ### USB Flash via PlatformIO
 
+**IMPORTANT: For fresh devices, ALWAYS erase flash first.** This clears EEPROM (WiFi creds, MQTT config, license key, thresholds) so the device boots clean into Setup Mode.
+
 ```bash
 # Connect ESP32 via USB
 cd Firmware
 
-# Build and upload
+# FRESH DEVICE: Erase all flash + upload (clears EEPROM completely)
+pio run --target erase && pio run --target upload
+
+# EXISTING DEVICE: Upload only (preserves EEPROM — WiFi, key, config)
 pio run --target upload
 
 # Monitor serial output
 pio device monitor --baud 115200
 ```
+
+> **When to erase vs preserve:**
+> - `erase + upload` = New device, factory reset, switching environments (local↔production)
+> - `upload only` = Firmware update on a working device (keeps WiFi + license key)
 
 If you have multiple USB devices, specify the port:
 

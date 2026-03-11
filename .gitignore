@@ -25,3 +25,4 @@ tools/qr_codes/
 backend/firmware_files/
 certs/
 *.zip
+.vercel

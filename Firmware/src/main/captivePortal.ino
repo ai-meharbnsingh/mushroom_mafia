@@ -8,6 +8,8 @@
 
 DNSServer dnsServer;
 bool portalRunning = false;
+bool scanInProgress = false;
+bool scanResultsReady = false;
 
 // ─── Helper functions for portal endpoints ────────────────────────────
 
@@ -15,18 +17,50 @@ void handlePortalRoot(AsyncWebServerRequest *request) {
     request->send_P(200, "text/html", PORTAL_HTML);
 }
 
+// Captive portal detection endpoints — redirect to portal root
+// Android, iOS, Windows, etc. all check different URLs to detect captive portals
+void handleCaptiveRedirect(AsyncWebServerRequest *request) {
+    request->redirect("http://192.168.4.1/");
+}
+
 void handlePortalScan(AsyncWebServerRequest *request) {
-    int n = WiFi.scanNetworks();
-    String json = "[";
-    for (int i = 0; i < n; i++) {
-        if (i > 0) json += ",";
-        json += "{\"ssid\":\"" + WiFi.SSID(i) + "\",";
-        json += "\"rssi\":" + String(WiFi.RSSI(i)) + ",";
-        json += "\"secure\":" + String(WiFi.encryptionType(i) != WIFI_AUTH_OPEN ? "true" : "false") + "}";
+    if (scanInProgress) {
+        // Check if async scan has completed
+        int n = WiFi.scanComplete();
+        if (n == WIFI_SCAN_RUNNING) {
+            request->send(200, "application/json", "{\"scanning\":true}");
+            return;
+        }
+        scanInProgress = false;
+        if (n == WIFI_SCAN_FAILED || n < 0) {
+            Serial.println("WiFi scan failed");
+            WiFi.scanDelete();
+            request->send(200, "application/json", "[]");
+            return;
+        }
+        // Build results from completed scan
+        String json = "[";
+        for (int i = 0; i < n; i++) {
+            if (i > 0) json += ",";
+            // Escape quotes in SSID names
+            String ssid = WiFi.SSID(i);
+            ssid.replace("\"", "\\\"");
+            json += "{\"ssid\":\"" + ssid + "\",";
+            json += "\"rssi\":" + String(WiFi.RSSI(i)) + ",";
+            json += "\"secure\":" + String(WiFi.encryptionType(i) != WIFI_AUTH_OPEN ? "true" : "false") + "}";
+        }
+        json += "]";
+        Serial.printf("Scan complete: %d networks found\n", n);
+        WiFi.scanDelete();
+        request->send(200, "application/json", json);
+        return;
     }
-    json += "]";
-    WiFi.scanDelete();
-    request->send(200, "application/json", json);
+
+    // Start async scan (non-blocking — returns immediately)
+    Serial.println("Starting async WiFi scan...");
+    WiFi.scanNetworks(true);  // true = async
+    scanInProgress = true;
+    request->send(200, "application/json", "{\"scanning\":true}");
 }
 
 void handlePortalConnect(AsyncWebServerRequest *request) {
@@ -67,8 +101,8 @@ void startCaptivePortal() {
         apName = "MUSH_" + String(licenseKey + strlen(licenseKey) - 4);
     }
 
-    // Fixed AP password for easy setup
-    String apPass = "123456";
+    // Fixed AP password for easy setup (min 8 chars for ESP32 softAP)
+    String apPass = "12345678";
 
     Serial.println("Starting captive portal...");
     Serial.println("AP Name: " + apName);
@@ -89,6 +123,22 @@ void startCaptivePortal() {
     server.on("/", HTTP_GET, handlePortalRoot);
     server.on("/scan", HTTP_GET, handlePortalScan);
     server.on("/connect", HTTP_POST, handlePortalConnect);
+
+    // Captive portal detection URLs — phones/OS check these to detect portals
+    // Android
+    server.on("/generate_204", HTTP_GET, handleCaptiveRedirect);
+    server.on("/gen_204", HTTP_GET, handleCaptiveRedirect);
+    server.on("/connecttest.txt", HTTP_GET, handleCaptiveRedirect);
+    // Apple
+    server.on("/hotspot-detect.html", HTTP_GET, handleCaptiveRedirect);
+    server.on("/library/test/success.html", HTTP_GET, handleCaptiveRedirect);
+    // Windows
+    server.on("/ncsi.txt", HTTP_GET, handleCaptiveRedirect);
+    server.on("/connecttest.txt", HTTP_GET, handleCaptiveRedirect);
+    // Firefox
+    server.on("/canonical.html", HTTP_GET, handleCaptiveRedirect);
+    // Catch-all: any unknown path → redirect to portal
+    server.onNotFound(handleCaptiveRedirect);
 
     server.begin();
     Serial.println("Captive portal web server started");
