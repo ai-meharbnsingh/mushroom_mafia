@@ -29,8 +29,23 @@ void setup() {
     // (must happen before initWiFi so we can read SSID/password or start portal)
     eepromInit();
 
+    // Setup Mode check: if EEPROM is blank or key is too short, enter USB provisioning
+    if (EEPROM.read(ADDR_KEY_FLAG) == 255 || strlen(licenseKey) < 4) {
+        enterSetupMode();
+    }
+
     // Set up the WiFi connection (reads credentials from EEPROM or starts captive portal)
     initWiFi();
+
+    // NTP time sync (needed for TLS certificate validation)
+    configTime(gmtOffset_sec, daylightOffset_sec, ntpServer);
+    Serial.print("NTP sync...");
+    struct tm timeinfo;
+    if (getLocalTime(&timeinfo, 10000)) {
+        Serial.println(&timeinfo, " %Y-%m-%d %H:%M:%S IST");
+    } else {
+        Serial.println(" failed (will retry)");
+    }
 
     // Initialize the connected devices (sensors, relays, auth)
     // Note: eepromInit() already called above, initializeDevices() will skip it
@@ -90,10 +105,10 @@ void loop() {
             }
             if (WiFi.status() != WL_CONNECTED) {
                 // WiFi still down — skip MQTT ops, keep reading sensors locally
+                // Backend controls relays in MQTT mode — no local threshold checking
                 readBagSensorNew();
                 readFromCO2();
                 readDHTSensor();
-                checkForRelay();
                 delay(1000);
                 return;
             }
@@ -101,6 +116,9 @@ void loop() {
             lcd.setCursor(0, 3);
             lcd.print("WiFi: OK            ");
         }
+
+        lcd.setCursor(0, 2);
+        lcd.print("MQTT Mode           ");
 
         mqttLoop();  // Process incoming MQTT messages
 
@@ -112,23 +130,26 @@ void loop() {
 
         if (currentTime - lastTime >= timerDelay) {
             // Every 30 seconds: read sensors and publish telemetry via MQTT
+            // Backend controls relays in MQTT mode — no local threshold checking
             readBagSensorNew();
             readFromCO2();
             readDHTSensor();
-            checkForRelay();
             publishTelemetry();
             lastTime = currentTime;
         } else {
-            // Between intervals: still read sensors and control relays locally
+            // Between intervals: still read sensors locally
+            // Backend controls relays in MQTT mode — no local threshold checking
             readBagSensorNew();
             readFromCO2();
             readDHTSensor();
-            checkForRelay();
         }
     } else {
         // ═══════════════════════════════════════════
         //  HTTP BOOTSTRAP MODE (existing behavior + provision polling)
         // ═══════════════════════════════════════════
+
+        lcd.setCursor(0, 2);
+        lcd.print("HTTP Mode           ");
 
         // WiFi resilience: check connection before HTTP operations
         if (WiFi.status() != WL_CONNECTED) {
@@ -193,5 +214,73 @@ void loop() {
           delay(2000);
         }
     }
-    EEPROM.commit();
+    if (eepromDirty) {
+        EEPROM.commit();
+        eepromDirty = false;
+    }
+}
+
+void enterSetupMode() {
+    Serial.println("\n=== SETUP MODE ===");
+    Serial.print("MAC:");
+    Serial.println(WiFi.macAddress());
+    Serial.println("AWAITING_KEY");
+
+    lcd.clear();
+    lcd.setCursor(0, 0);
+    lcd.print("=== SETUP MODE ===");
+    lcd.setCursor(0, 1);
+    lcd.print("Connect via USB...");
+    lcd.setCursor(0, 2);
+    lcd.print("MAC:");
+    lcd.print(WiFi.macAddress());
+
+    pinMode(2, OUTPUT);
+    unsigned long lastBlink = 0;
+    bool ledState = false;
+
+    while (true) {
+        if (millis() - lastBlink > 500) {
+            ledState = !ledState;
+            digitalWrite(2, ledState);
+            lastBlink = millis();
+        }
+        if (Serial.available()) {
+            String input = Serial.readStringUntil('\n');
+            input.trim();
+            if (input.startsWith("KEY:")) {
+                String key = input.substring(4);
+                key.trim();
+                if (key.length() == 18 && key.startsWith("LIC-")) {
+                    char keyArr[20];
+                    key.toCharArray(keyArr, 20);
+                    writeStringToEEPROM(ADDR_KEY_FLAG, keyArr);
+                    for (int i = 0; i < 18; i++) licenseKey[i] = keyArr[i];
+                    licenseKey[18] = '\0';
+                    writeToEeprom<uint16_t>(ADDR_MIN_VAL_CO2, CO2MinValue);
+                    writeToEeprom<float>(ADDR_MIN_VAL_HUM, humidityMin);
+                    writeToEeprom<float>(ADDR_MIN_VAL_TEMP, tempMinValue);
+                    EEPROM.commit();
+                    Serial.println("KEY_OK:" + key);
+                    lcd.clear();
+                    lcd.print("Key Saved!");
+                    lcd.setCursor(0, 1);
+                    lcd.print(key);
+                    delay(2000);
+                    ESP.restart();
+                } else {
+                    Serial.println("KEY_ERR:Invalid format");
+                }
+            } else if (input == "PING") {
+                Serial.println("PONG");
+            } else if (input == "MAC") {
+                Serial.print("MAC:");
+                Serial.println(WiFi.macAddress());
+            } else if (input == "VERSION") {
+                Serial.print("VERSION:");
+                Serial.println(FIRMWARE_VERSION);
+            }
+        }
+        delay(10);
+    }
 }

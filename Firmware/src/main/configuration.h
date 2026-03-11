@@ -19,6 +19,8 @@
 #include <DNSServer.h>                   // DNS server for captive portal redirect
 #include <Update.h>                      // Arduino OTA Update library
 #include <esp_ota_ops.h>                 // ESP-IDF OTA partition operations (dual-partition rollback)
+#include <WiFiClientSecure.h>
+#include <time.h>
 
 int row = 0;
 int column = 0;
@@ -83,8 +85,10 @@ const char* resetCode = "AB1234";
 String id = "";
 
 // MQTT Configuration
-const char* mqttBrokerHost = "192.168.29.236";  // Mac LAN IP — change to production broker address
-int mqttBrokerPort = 1883;
+const char* mqttBrokerHost = "f92600b988e54ae9b2b04e8c04752642.s1.eu.hivemq.cloud";
+int mqttBrokerPort = 8883;
+const char* mqttUsername = "admin";
+const char* mqttDefaultPassword = "Admin123";
 char devicePassword[65];   // MQTT password received from server during provisioning
 bool mqttProvisioned = false;  // false = HTTP bootstrap mode, true = MQTT runtime mode
 bool portalActive = false;     // true when captive portal is running
@@ -92,7 +96,7 @@ bool deviceDisabled = false;   // Kill-switch state (set via MQTT control topic)
 char mqttHost[65];             // MQTT broker host from provisioning (overrides mqttBrokerHost)
 
 // Backend API Configuration
-const char* apiBaseURL = "http://192.168.29.236:3800/api/v1";  // Mac LAN IP — change to production URL before deploy
+const char* apiBaseURL = "https://protective-enjoyment-production-2320.up.railway.app/api/v1";
 const char* readingsEndpoint = "/device/readings";
 const char* heartbeatEndpoint = "/device/heartbeat";
 const char* commandsEndpoint = "/device/";  // + deviceId + "/commands"
@@ -156,7 +160,7 @@ const char* provisionEndpoint = "/device/provision/";  // + license_key
 #define EEPROM_MEMORY_SIZE 512
 
 // ─── OTA Configuration ─────────────────────────────────────────────
-const char* FIRMWARE_VERSION = "1.0.0";
+const char* FIRMWARE_VERSION = "4.0.0";
 #define OTA_VALIDATION_TIMEOUT 60000   // 60s to validate new firmware after boot
 #define OTA_MAX_DOWNLOAD_SIZE 1900000  // ~1.9MB max firmware binary size
 
@@ -191,6 +195,12 @@ unsigned long lastWifiReconnectAttempt = 0;  // WiFi reconnect backoff tracker
 unsigned long timerDelay = 30000;  // 30 seconds (was 300000 = 5 minutes)
 
 int deviceId = -1;  // Set after registration, stored in EEPROM
+
+bool eepromDirty = false;
+const char* ntpServer = "pool.ntp.org";
+const long gmtOffset_sec = 19800;
+const int daylightOffset_sec = 0;
+#define HEAP_WARNING_THRESHOLD 20000
 
 // Template function — declared in header to avoid PlatformIO prototype generation issues
 template <typename T>

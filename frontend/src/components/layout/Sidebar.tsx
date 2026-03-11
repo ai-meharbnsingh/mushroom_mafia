@@ -10,6 +10,7 @@ import {
   FileText,
   Users,
   HardDrive,
+  Zap,
   ChevronLeft,
   ChevronRight,
   LogOut,
@@ -36,6 +37,7 @@ const navItems: NavItem[] = [
   { id: 'reports', label: 'Reports', icon: FileText, path: '/reports' },
   { id: 'users', label: 'Users', icon: Users, path: '/users', adminOnly: true },
   { id: 'firmware', label: 'Firmware', icon: HardDrive, path: '/firmware', adminOnly: true },
+  { id: 'flash-device', label: 'Flash Device', icon: Zap, path: '/flash-device', adminOnly: true },
 ];
 
 export const Sidebar: React.FC = () => {

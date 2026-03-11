@@ -28,6 +28,7 @@ import { Reports } from '@/pages/Reports';
 import { Users } from '@/pages/Users';
 import { Profile } from '@/pages/Profile';
 import { FirmwareManagement } from '@/pages/FirmwareManagement';
+import { FlashDevice } from '@/pages/FlashDevice';
 
 // Protected Route Component
 const ProtectedRoute: React.FC<{ children: React.ReactNode }> = ({ children }) => {
@@ -205,6 +206,14 @@ function App() {
                   element={
                     <AdminRoute>
                       <FirmwareManagement />
+                    </AdminRoute>
+                  }
+                />
+                <Route
+                  path="flash-device"
+                  element={
+                    <AdminRoute>
+                      <FlashDevice />
                     </AdminRoute>
                   }
                 />

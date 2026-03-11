@@ -75,14 +75,7 @@ void readFromEeprom() {
     Serial.println("Legacy device key loaded (HTTP-only mode)");
   }
 
-  // Legacy WiFi migration: if device has a license key but WiFi flag is
-  // uninitialized (255), write the hardcoded Jas_Mehar credentials to EEPROM.
-  // This keeps existing 3 devices working without needing the captive portal.
-  uint8_t wifiFlag = EEPROM.read(ADDR_WIFI_PROVISIONED);
-  if (wifiFlag == 255 && strlen(licenseKey) > 4) {
-    Serial.println("Legacy migration: writing hardcoded WiFi to EEPROM");
-    saveWiFiCredentials("Jas_Mehar", "airtel2730");
-  }
+  // No legacy WiFi migration — new devices use captive portal
 
   EEPROM.get(ADDR_CO2_RELAY_STATUS, _co2RelayStatus);
   EEPROM.get(ADDR_HUM_RELAY_STATUS, _humidityRelayStatus);

@@ -1,18 +1,20 @@
 import hashlib
+import io
 import logging
 import os
 from datetime import datetime
 from pathlib import Path
 
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form, status, Header
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, StreamingResponse
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, update
+from sqlalchemy import select, update, desc
 
 from app.config import settings
 from app.database import get_db
 from app.models.device import Device
 from app.models.firmware import Firmware
+from app.models.firmware_file import FirmwareFile
 from app.models.user import User
 from app.models.enums import UserRole, SubscriptionStatus
 from app.schemas.firmware import (
@@ -339,3 +341,216 @@ async def get_ota_status(
         )
         for d in devices
     ]
+
+
+# =====================================================================
+# FirmwareFile endpoints (in-DB binary storage for Web Serial / devices)
+# =====================================================================
+
+
+@router.post("/files/upload")
+async def upload_firmware_file(
+    file: UploadFile = File(...),
+    version: str = Form(...),
+    board_type: str = Form("ESP32"),
+    notes: str = Form(None),
+    current_user: User = Depends(
+        require_roles(UserRole.SUPER_ADMIN, UserRole.ADMIN)
+    ),
+    db: AsyncSession = Depends(get_db),
+):
+    """Upload a .bin firmware file and store it in the database (ADMIN+ only).
+
+    Computes SHA256, stores binary in DB, and marks it as the active version
+    for the given board_type (deactivating previous active versions).
+    """
+    if not file.filename or not file.filename.endswith(".bin"):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Only .bin firmware files are accepted",
+        )
+
+    # Check version uniqueness
+    existing = await db.execute(
+        select(FirmwareFile).where(FirmwareFile.version == version)
+    )
+    if existing.scalar_one_or_none():
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=f"Firmware file version {version} already exists",
+        )
+
+    content = await file.read()
+    file_size = len(content)
+    checksum = hashlib.sha256(content).hexdigest()
+
+    # Deactivate previous active firmware for the same board_type
+    await db.execute(
+        update(FirmwareFile)
+        .where(FirmwareFile.board_type == board_type, FirmwareFile.is_active == True)
+        .values(is_active=False)
+    )
+
+    fw = FirmwareFile(
+        version=version,
+        filename=file.filename,
+        file_data=content,
+        file_size=file_size,
+        checksum_sha256=checksum,
+        board_type=board_type,
+        upload_notes=notes,
+        uploaded_by=current_user.user_id,
+        is_active=True,
+    )
+    db.add(fw)
+    await db.commit()
+    await db.refresh(fw)
+
+    logger.info(
+        "FirmwareFile v%s uploaded by user %s (size=%d, sha256=%s, board=%s)",
+        version, current_user.user_id, file_size, checksum, board_type,
+    )
+
+    return {
+        "id": fw.id,
+        "version": fw.version,
+        "filename": fw.filename,
+        "file_size": fw.file_size,
+        "checksum_sha256": fw.checksum_sha256,
+        "board_type": fw.board_type,
+        "uploaded_at": fw.uploaded_at.isoformat() if fw.uploaded_at else None,
+        "is_active": fw.is_active,
+    }
+
+
+@router.get("/files/latest")
+async def get_latest_firmware_file(
+    db: AsyncSession = Depends(get_db),
+):
+    """Get latest active firmware file metadata (no auth — devices call this)."""
+    result = await db.execute(
+        select(FirmwareFile)
+        .where(FirmwareFile.is_active == True)
+        .order_by(desc(FirmwareFile.uploaded_at))
+        .limit(1)
+    )
+    fw = result.scalar_one_or_none()
+    if not fw:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="No active firmware file found",
+        )
+    return {
+        "version": fw.version,
+        "filename": fw.filename,
+        "file_size": fw.file_size,
+        "checksum_sha256": fw.checksum_sha256,
+        "board_type": fw.board_type,
+        "uploaded_at": fw.uploaded_at.isoformat() if fw.uploaded_at else None,
+    }
+
+
+@router.get("/files/latest/bin")
+async def download_latest_firmware_file_bin(
+    db: AsyncSession = Depends(get_db),
+):
+    """Download latest active firmware .bin binary (no auth — devices and Web Serial use this)."""
+    result = await db.execute(
+        select(FirmwareFile)
+        .where(FirmwareFile.is_active == True)
+        .order_by(desc(FirmwareFile.uploaded_at))
+        .limit(1)
+    )
+    fw = result.scalar_one_or_none()
+    if not fw:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="No active firmware file found",
+        )
+    return StreamingResponse(
+        io.BytesIO(fw.file_data),
+        media_type="application/octet-stream",
+        headers={
+            "Content-Disposition": f'attachment; filename="{fw.filename}"',
+            "Content-Length": str(fw.file_size),
+            "X-Checksum-SHA256": fw.checksum_sha256,
+            "X-Firmware-Version": fw.version,
+        },
+    )
+
+
+@router.get("/files/versions")
+async def list_firmware_file_versions(
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """List all firmware file versions (any authenticated user)."""
+    result = await db.execute(
+        select(FirmwareFile).order_by(desc(FirmwareFile.uploaded_at))
+    )
+    files = result.scalars().all()
+    return [
+        {
+            "id": fw.id,
+            "version": fw.version,
+            "filename": fw.filename,
+            "file_size": fw.file_size,
+            "checksum_sha256": fw.checksum_sha256,
+            "board_type": fw.board_type,
+            "upload_notes": fw.upload_notes,
+            "uploaded_at": fw.uploaded_at.isoformat() if fw.uploaded_at else None,
+            "is_active": fw.is_active,
+        }
+        for fw in files
+    ]
+
+
+@router.get("/files/{version}/bin")
+async def download_firmware_file_by_version(
+    version: str,
+    db: AsyncSession = Depends(get_db),
+):
+    """Download a specific firmware version .bin (no auth — devices use this)."""
+    result = await db.execute(
+        select(FirmwareFile).where(FirmwareFile.version == version)
+    )
+    fw = result.scalar_one_or_none()
+    if not fw:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Firmware file version {version} not found",
+        )
+    return StreamingResponse(
+        io.BytesIO(fw.file_data),
+        media_type="application/octet-stream",
+        headers={
+            "Content-Disposition": f'attachment; filename="{fw.filename}"',
+            "Content-Length": str(fw.file_size),
+            "X-Checksum-SHA256": fw.checksum_sha256,
+            "X-Firmware-Version": fw.version,
+        },
+    )
+
+
+@router.delete("/files/{version}")
+async def delete_firmware_file(
+    version: str,
+    current_user: User = Depends(
+        require_roles(UserRole.SUPER_ADMIN, UserRole.ADMIN)
+    ),
+    db: AsyncSession = Depends(get_db),
+):
+    """Delete a firmware file version (ADMIN+ only). Sets is_active=False."""
+    result = await db.execute(
+        select(FirmwareFile).where(FirmwareFile.version == version)
+    )
+    fw = result.scalar_one_or_none()
+    if not fw:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Firmware file version {version} not found",
+        )
+    fw.is_active = False
+    await db.commit()
+    logger.info("FirmwareFile v%s deactivated by user %s", version, current_user.user_id)
+    return {"detail": f"Firmware file version {version} deactivated"}

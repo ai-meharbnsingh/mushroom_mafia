@@ -94,39 +94,57 @@ void checkForRelay()  {
   
   if(co2 < CO2MinValue )  {
       digitalWrite(CO2_RELAY_3, HIGH);
-      _co2RelayStatus = HIGH;
-      writeToEeprom<bool>(ADDR_CO2_RELAY_STATUS, _co2RelayStatus);
+      if (_co2RelayStatus != HIGH) {
+          _co2RelayStatus = HIGH;
+          writeToEeprom<bool>(ADDR_CO2_RELAY_STATUS, _co2RelayStatus);
+          eepromDirty = true;
+      }
   }
   else if(co2 > CO2MinValue + 100)  {
       digitalWrite(CO2_RELAY_3, LOW);
-      _co2RelayStatus = LOW;
-      writeToEeprom<bool>(ADDR_CO2_RELAY_STATUS, _co2RelayStatus);
+      if (_co2RelayStatus != LOW) {
+          _co2RelayStatus = LOW;
+          writeToEeprom<bool>(ADDR_CO2_RELAY_STATUS, _co2RelayStatus);
+          eepromDirty = true;
+      }
   }
-  
+
   delay(100);
 
   if (humidity >= humidityMin)  {
       digitalWrite(HUMIDITY_RELAY_1, HIGH);
-      _humidityRelayStatus = HIGH;
-      writeToEeprom<bool>(ADDR_HUM_RELAY_STATUS, _humidityRelayStatus);
+      if (_humidityRelayStatus != HIGH) {
+          _humidityRelayStatus = HIGH;
+          writeToEeprom<bool>(ADDR_HUM_RELAY_STATUS, _humidityRelayStatus);
+          eepromDirty = true;
+      }
   }
   else if( humidity < humidityMin - 2.5)  {
       digitalWrite(HUMIDITY_RELAY_1, LOW);
-      _humidityRelayStatus = LOW;
-      writeToEeprom<bool>(ADDR_HUM_RELAY_STATUS, _humidityRelayStatus);
+      if (_humidityRelayStatus != LOW) {
+          _humidityRelayStatus = LOW;
+          writeToEeprom<bool>(ADDR_HUM_RELAY_STATUS, _humidityRelayStatus);
+          eepromDirty = true;
+      }
   }
 
   delay(100);
 
   if (temperature <= tempMinValue)  {
       digitalWrite(TEMP_RELAY_2, HIGH);
-      _ACRelayStatus = HIGH;
-      writeToEeprom<bool>(ADDR_AC_RELAY_STATUS, _ACRelayStatus);
+      if (_ACRelayStatus != HIGH) {
+          _ACRelayStatus = HIGH;
+          writeToEeprom<bool>(ADDR_AC_RELAY_STATUS, _ACRelayStatus);
+          eepromDirty = true;
+      }
   }
   else if (temperature > tempMinValue + 1)  {
       digitalWrite(TEMP_RELAY_2, LOW);
-      _ACRelayStatus = LOW;
-      writeToEeprom<bool>(ADDR_AC_RELAY_STATUS, _ACRelayStatus);
+      if (_ACRelayStatus != LOW) {
+          _ACRelayStatus = LOW;
+          writeToEeprom<bool>(ADDR_AC_RELAY_STATUS, _ACRelayStatus);
+          eepromDirty = true;
+      }
   }
 
   lcd.setCursor(13,0);

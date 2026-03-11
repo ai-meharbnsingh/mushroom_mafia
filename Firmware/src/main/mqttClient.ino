@@ -15,15 +15,17 @@
  * Requires: PubSubClient library by Nick O'Leary (install via Arduino Library Manager)
  */
 
-WiFiClient mqttWifiClient;
+WiFiClientSecure mqttWifiClient;
 PubSubClient mqttClient(mqttWifiClient);
 
 void setupMQTT() {
     // Use provisioned host if available, otherwise default
     const char* host = (strlen(mqttHost) > 0) ? mqttHost : mqttBrokerHost;
+    mqttWifiClient.setInsecure();
     mqttClient.setServer(host, mqttBrokerPort);
     mqttClient.setCallback(mqttCallback);
     mqttClient.setBufferSize(1024);
+    mqttClient.setKeepAlive(60);
     Serial.print("MQTT configured: ");
     Serial.print(host);
     Serial.print(":");
@@ -45,7 +47,7 @@ bool connectMQTT() {
     String statusTopic = "device/" + clientId + "/status";
     String lwtPayload = "{\"status\":\"offline\"}";
 
-    int maxRetries = 20;
+    int maxRetries = 10;
     for (int attempt = 1; attempt <= maxRetries && !mqttClient.connected(); attempt++) {
         // Re-check WiFi before each attempt
         if (WiFi.status() != WL_CONNECTED) {
@@ -55,30 +57,30 @@ bool connectMQTT() {
 
         lcd.clear();
         lcd.setCursor(0, 0);
-        lcd.print("MQTT Try: ");
+        lcd.print("TLS MQTT Try: ");
         lcd.print(attempt);
         lcd.print("/");
         lcd.print(maxRetries);
 
-        Serial.printf("MQTT connecting as: %s (attempt %d/%d)\n", clientId.c_str(), attempt, maxRetries);
+        Serial.printf("MQTT TLS connecting as: %s (attempt %d/%d)\n", clientId.c_str(), attempt, maxRetries);
 
-        if (mqttClient.connect(clientId.c_str(), licenseKey, devicePassword,
+        if (mqttClient.connect(clientId.c_str(), mqttUsername, mqttDefaultPassword,
                                statusTopic.c_str(), 1, true, lwtPayload.c_str())) {
-            Serial.println("MQTT Connected");
+            Serial.println("MQTT TLS Connected");
             lcd.setCursor(0, 1);
-            lcd.print("MQTT Connected!");
+            lcd.print("MQTT TLS Connected!");
             mqttConsecutiveFailures = 0;  // Reset failure counter on success
 
-            // Subscribe to command topics
+            // Subscribe to command topics with QoS 1
             String cmdTopic = "device/" + clientId + "/commands";
             String ctrlTopic = "device/" + clientId + "/control";
             String otaTopic = "device/" + clientId + "/ota";
-            mqttClient.subscribe(cmdTopic.c_str());
-            mqttClient.subscribe(ctrlTopic.c_str());
-            mqttClient.subscribe(otaTopic.c_str());
+            mqttClient.subscribe(cmdTopic.c_str(), 1);
+            mqttClient.subscribe(ctrlTopic.c_str(), 1);
+            mqttClient.subscribe(otaTopic.c_str(), 1);
 
             String configTopic = "device/" + clientId + "/config";
-            mqttClient.subscribe(configTopic.c_str());
+            mqttClient.subscribe(configTopic.c_str(), 1);
 
             Serial.println("Subscribed: " + cmdTopic);
             Serial.println("Subscribed: " + ctrlTopic);
@@ -90,10 +92,10 @@ bool connectMQTT() {
             mqttClient.publish(statusTopic.c_str(), onlinePayload.c_str(), true);
             return true;
         } else {
-            Serial.print("MQTT failed, rc=");
+            Serial.print("MQTT TLS failed, rc=");
             Serial.println(mqttClient.state());
             lcd.setCursor(0, 1);
-            lcd.print("MQTT fail rc=");
+            lcd.print("TLS fail rc=");
             lcd.print(mqttClient.state());
             delay(5000);
         }
@@ -214,21 +216,25 @@ void handleRelayCommand(String payload) {
         digitalWrite(AHU_RELAY_4, relayState ? HIGH : LOW);
         _ahuRelayStatus = relayState;
         writeToEeprom<bool>(ADDR_AHU_RELAY_STATUS, _ahuRelayStatus);
+        eepromDirty = true;
         Serial.println("MQTT: AHU relay -> " + String(relayState ? "ON" : "OFF"));
     } else if (relayType == "HUMIDIFIER" || relayType == "humidifier") {
         digitalWrite(HUMIDIFIER_RELAY_5, relayState ? HIGH : LOW);
         _humidifierRelayStatus = relayState;
         writeToEeprom<bool>(ADDR_HUM2_RELAY_STATUS, _humidifierRelayStatus);
+        eepromDirty = true;
         Serial.println("MQTT: Humidifier relay -> " + String(relayState ? "ON" : "OFF"));
     } else if (relayType == "DUCT_FAN" || relayType == "duct_fan") {
         digitalWrite(DUCT_FAN_RELAY_6, relayState ? HIGH : LOW);
         _ductFanRelayStatus = relayState;
         writeToEeprom<bool>(ADDR_DUCT_RELAY_STATUS, _ductFanRelayStatus);
+        eepromDirty = true;
         Serial.println("MQTT: Duct fan relay -> " + String(relayState ? "ON" : "OFF"));
     } else if (relayType == "EXTRA" || relayType == "extra") {
         digitalWrite(EXTRA_RELAY_7, relayState ? HIGH : LOW);
         _extraRelayStatus = relayState;
         writeToEeprom<bool>(ADDR_EXTRA_RELAY_STATUS, _extraRelayStatus);
+        eepromDirty = true;
         Serial.println("MQTT: Extra relay -> " + String(relayState ? "ON" : "OFF"));
     }
 }
@@ -282,9 +288,15 @@ void handleOTA(String payload) {
     lcd.print(" -> v");
     lcd.print(version);
 
-    // ─── 3. Download firmware binary via HTTP ──────────────────────
+    // ─── 3. Download firmware binary via HTTPS ─────────────────────
+    // Disconnect MQTT to free RAM for 2nd TLS connection
+    mqttClient.disconnect();
+    delay(100);
+
+    WiFiClientSecure otaClient;
+    otaClient.setInsecure();
     HTTPClient http;
-    http.begin(url);
+    http.begin(otaClient, url);
     http.setTimeout(30000);  // 30s timeout for download
 
     int httpCode = http.GET();
@@ -297,6 +309,7 @@ void handleOTA(String payload) {
         lcd.print(httpCode);
         http.end();
         delay(3000);
+        setupMQTT(); connectMQTT();
         return;
     }
 
@@ -307,6 +320,7 @@ void handleOTA(String payload) {
         lcd.print("OTA: Bad size");
         http.end();
         delay(3000);
+        setupMQTT(); connectMQTT();
         return;
     }
 
@@ -318,6 +332,7 @@ void handleOTA(String payload) {
         lcd.print(String(contentLength / 1024) + "KB max=" + String(OTA_MAX_DOWNLOAD_SIZE / 1024) + "KB");
         http.end();
         delay(3000);
+        setupMQTT(); connectMQTT();
         return;
     }
 
@@ -332,6 +347,7 @@ void handleOTA(String payload) {
         lcd.print(Update.errorString());
         http.end();
         delay(3000);
+        setupMQTT(); connectMQTT();
         return;
     }
 
@@ -360,6 +376,7 @@ void handleOTA(String payload) {
                 lcd.print("OTA: Write error");
                 http.end();
                 delay(3000);
+                setupMQTT(); connectMQTT();
                 return;
             }
             written += bytesWritten;
@@ -394,6 +411,7 @@ void handleOTA(String payload) {
         lcd.clear();
         lcd.print("OTA: Size mismatch");
         delay(3000);
+        setupMQTT(); connectMQTT();
         return;
     }
 
@@ -405,6 +423,7 @@ void handleOTA(String payload) {
         lcd.setCursor(0, 1);
         lcd.print(Update.errorString());
         delay(3000);
+        setupMQTT(); connectMQTT();
         return;
     }
 
@@ -413,6 +432,7 @@ void handleOTA(String payload) {
         lcd.clear();
         lcd.print("OTA: Incomplete");
         delay(3000);
+        setupMQTT(); connectMQTT();
         return;
     }
 
@@ -476,7 +496,7 @@ void handleConfig(String payload) {
         Serial.printf("Config: Humidity min updated to %.1f\n", humidityMin);
     }
 
-    EEPROM.commit();
+    eepromDirty = true;
 
     // Show on LCD
     lcd.clear();
@@ -498,47 +518,55 @@ void publishTelemetry() {
         connectMQTT();
     }
 
+    // Heap warning check
+    uint32_t freeHeap = ESP.getFreeHeap();
+    if (freeHeap < HEAP_WARNING_THRESHOLD) {
+        Serial.printf("WARNING: Low heap: %u bytes\n", freeHeap);
+    }
+
     String topic = "device/" + String(licenseKey) + "/telemetry";
 
-    // Build JSON telemetry payload
-    String json = "{";
-    json += "\"co2_ppm\":" + String(co2) + ",";
-    json += "\"room_temp\":" + String(temperature, 1) + ",";
-    json += "\"room_humidity\":" + String(humidity, 1) + ",";
-    json += "\"bag_temps\":[";
+    // Build JSON telemetry payload using ArduinoJson (replaces String concatenation)
+    StaticJsonDocument<768> doc;
+    doc["co2_ppm"] = co2;
+    doc["room_temp"] = serialized(String(temperature, 1));
+    doc["room_humidity"] = serialized(String(humidity, 1));
+
+    JsonArray bagTemps = doc.createNestedArray("bag_temps");
     for (unsigned int i = 0; i < deviceCountBus1; i++) {
-        json += String(tempInBusOne[i], 1);
-        if (i < deviceCountBus1 - 1 || deviceCountBus2 > 0) json += ",";
+        bagTemps.add(serialized(String(tempInBusOne[i], 1)));
     }
     for (unsigned int i = 0; i < deviceCountBus2; i++) {
-        json += String(tempInBusTwo[i], 1);
-        if (i < deviceCountBus2 - 1) json += ",";
+        bagTemps.add(serialized(String(tempInBusTwo[i], 1)));
     }
-    json += "],";
-    json += "\"outdoor_temp\":" + String(temperatureOut, 1) + ",";
-    json += "\"outdoor_humidity\":" + String(humidityOut, 1) + ",";
-    json += "\"relay_states\":{";
-    json += "\"co2\":" + String(_co2RelayStatus ? "true" : "false") + ",";
-    json += "\"humidity\":" + String(_humidityRelayStatus ? "true" : "false") + ",";
-    json += "\"temperature\":" + String(_ACRelayStatus ? "true" : "false") + ",";
-    json += "\"ahu\":" + String(_ahuRelayStatus ? "true" : "false") + ",";
-    json += "\"humidifier\":" + String(_humidifierRelayStatus ? "true" : "false") + ",";
-    json += "\"duct_fan\":" + String(_ductFanRelayStatus ? "true" : "false") + ",";
-    json += "\"extra\":" + String(_extraRelayStatus ? "true" : "false");
-    json += "},";
-    json += "\"wifi_rssi\":" + String(WiFi.RSSI()) + ",";
-    json += "\"free_heap\":" + String(ESP.getFreeHeap()) + ",";
-    json += "\"device_ip\":\"" + WiFi.localIP().toString() + "\",";
-    json += "\"firmware_version\":\"" + String(FIRMWARE_VERSION) + "\",";
-    json += "\"thresholds\":{";
-    json += "\"co2_min\":" + String(CO2MinValue) + ",";
-    json += "\"temp_min\":" + String(tempMinValue, 1) + ",";
-    json += "\"humidity_min\":" + String(humidityMin, 1);
-    json += "}";
-    json += "}";
 
-    mqttClient.publish(topic.c_str(), json.c_str());
-    Serial.println("MQTT telemetry published (" + String(json.length()) + " bytes)");
+    doc["outdoor_temp"] = serialized(String(temperatureOut, 1));
+    doc["outdoor_humidity"] = serialized(String(humidityOut, 1));
+
+    JsonObject relays = doc.createNestedObject("relay_states");
+    relays["co2"] = (bool)_co2RelayStatus;
+    relays["humidity"] = (bool)_humidityRelayStatus;
+    relays["temperature"] = (bool)_ACRelayStatus;
+    relays["ahu"] = (bool)_ahuRelayStatus;
+    relays["humidifier"] = (bool)_humidifierRelayStatus;
+    relays["duct_fan"] = (bool)_ductFanRelayStatus;
+    relays["extra"] = (bool)_extraRelayStatus;
+
+    doc["wifi_rssi"] = WiFi.RSSI();
+    doc["free_heap"] = freeHeap;
+    doc["device_ip"] = WiFi.localIP().toString();
+    doc["firmware_version"] = FIRMWARE_VERSION;
+
+    JsonObject thresholds = doc.createNestedObject("thresholds");
+    thresholds["co2_min"] = CO2MinValue;
+    thresholds["temp_min"] = serialized(String(tempMinValue, 1));
+    thresholds["humidity_min"] = serialized(String(humidityMin, 1));
+
+    char buffer[768];
+    size_t len = serializeJson(doc, buffer, sizeof(buffer));
+
+    mqttClient.publish(topic.c_str(), buffer);
+    Serial.printf("MQTT telemetry published (%d bytes)\n", len);
 }
 
 void mqttLoop() {

@@ -1,6 +1,7 @@
 bool authenticateDevKey(const char* tempDevKey) {
     StaticJsonDocument<200> doc;
-    WiFiClient client;
+    WiFiClientSecure client;
+    client.setInsecure();
     HTTPClient http;
 
     String newAuthURL = String(apiBaseURL) + String(registerEndpoint);
@@ -11,7 +12,7 @@ bool authenticateDevKey(const char* tempDevKey) {
 
     String jsonPayload = "{\"license_key\":\"" + String(tempDevKey) + "\",";
     jsonPayload += "\"mac_address\":\"" + WiFi.macAddress() + "\",";
-    jsonPayload += "\"firmware_version\":\"3.0.0\"}";
+    jsonPayload += "\"firmware_version\":\"" + String(FIRMWARE_VERSION) + "\"}";
 
     Serial.println("Auth URL: " + newAuthURL);
     int httpResponseCode = http.POST(jsonPayload);

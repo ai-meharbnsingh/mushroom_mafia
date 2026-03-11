@@ -27,6 +27,7 @@ from app.models.alert import Alert
 from app.models.report import Report
 from app.models.audit_log import AuditLog
 from app.models.firmware import Firmware
+from app.models.firmware_file import FirmwareFile
 from app.models.relay_config import RelayConfig
 from app.models.relay_schedule import RelaySchedule
 from app.models.harvest import Harvest
@@ -62,6 +63,7 @@ __all__ = [
     "Report",
     "AuditLog",
     "Firmware",
+    "FirmwareFile",
     "Harvest",
     "GrowthCycle",
     "ClimateGuideline",

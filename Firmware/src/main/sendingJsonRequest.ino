@@ -15,7 +15,8 @@ void sendHTTPRequest() {
         return;
     }
 
-    WiFiClient client;
+    WiFiClientSecure client;
+    client.setInsecure();
     HTTPClient http;
 
     // Build full URL
@@ -82,7 +83,8 @@ void pollRelayCommands() {
         return;
     }
 
-    WiFiClient client;
+    WiFiClientSecure client;
+    client.setInsecure();
     HTTPClient http;
 
     String url = String(apiBaseURL) + String(commandsEndpoint) + String(deviceId) + "/commands";
@@ -116,7 +118,8 @@ void pollRelayCommands() {
 void sendHeartbeat() {
     if (deviceId <= 0 || WiFi.status() != WL_CONNECTED) return;
 
-    WiFiClient client;
+    WiFiClientSecure client;
+    client.setInsecure();
     HTTPClient http;
 
     String url = String(apiBaseURL) + String(heartbeatEndpoint);
@@ -163,7 +166,8 @@ void pollProvisionEndpoint() {
         return;
     }
 
-    WiFiClient client;
+    WiFiClientSecure client;
+    client.setInsecure();
     HTTPClient http;
 
     String url = String(apiBaseURL) + String(provisionEndpoint) + String(licenseKey);

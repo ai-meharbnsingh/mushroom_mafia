@@ -61,17 +61,14 @@ void startCaptivePortal() {
     portalActive = true;
     portalRunning = true;
 
-    // Build AP name: MUSHROOM_XXXX (last 4 hex of MAC)
-    String mac = WiFi.macAddress();
-    String suffix = mac.substring(mac.length() - 5);
-    suffix.replace(":", "");
-    String apName = "MUSHROOM_" + suffix;
-
-    // Build AP password: mush_ + last 4 chars of license key, or fallback
-    String apPass = "mushroom1234";
+    // Build AP name: MUSH_XXXX (last 4 chars of license key)
+    String apName = "MUSH_SETUP";
     if (strlen(licenseKey) >= 4) {
-        apPass = "mush_" + String(licenseKey + strlen(licenseKey) - 4);
+        apName = "MUSH_" + String(licenseKey + strlen(licenseKey) - 4);
     }
+
+    // Fixed AP password for easy setup
+    String apPass = "123456";
 
     Serial.println("Starting captive portal...");
     Serial.println("AP Name: " + apName);
