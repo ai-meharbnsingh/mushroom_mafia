@@ -36,7 +36,7 @@ from app.services.ws_manager import ws_manager
 router = APIRouter()
 
 
-@router.get("/pending", response_model=list[DeviceResponse])
+@router.get("/pending", response_model=list[DeviceResponse], summary="List devices with PENDING status")
 async def list_pending_devices(
     current_user: User = Depends(
         require_roles(UserRole.SUPER_ADMIN, UserRole.ADMIN)
@@ -53,7 +53,7 @@ async def list_pending_devices(
     return result.scalars().all()
 
 
-@router.get("/", response_model=list[DeviceResponse])
+@router.get("/", response_model=list[DeviceResponse], summary="List all devices for the current user")
 async def list_devices(
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
@@ -98,7 +98,7 @@ async def list_devices(
     return list(assigned_devices) + list(unassigned_devices)
 
 
-@router.get("/{device_id}", response_model=DeviceResponse)
+@router.get("/{device_id}", response_model=DeviceResponse, summary="Get a device by ID")
 async def get_device(
     device_id: int,
     current_user: User = Depends(get_current_user),
@@ -134,7 +134,7 @@ async def get_device(
     return device
 
 
-@router.put("/{device_id}", response_model=DeviceResponse)
+@router.put("/{device_id}", response_model=DeviceResponse, summary="Update device details or assign to a room")
 async def update_device(
     device_id: int,
     device_in: DeviceUpdate,
@@ -178,7 +178,7 @@ async def update_device(
     return device
 
 
-@router.delete("/{device_id}", status_code=status.HTTP_200_OK)
+@router.delete("/{device_id}", status_code=status.HTTP_200_OK, summary="Deactivate a device")
 async def delete_device(
     device_id: int,
     current_user: User = Depends(
@@ -202,7 +202,7 @@ async def delete_device(
     return {"detail": "Device deactivated"}
 
 
-@router.post("/provision", response_model=DeviceProvisionResponse)
+@router.post("/provision", response_model=DeviceProvisionResponse, summary="Provision a new device and generate license key")
 async def provision_device(
     provision_in: DeviceProvision,
     current_user: User = Depends(require_roles(UserRole.SUPER_ADMIN, UserRole.ADMIN)),
@@ -233,7 +233,7 @@ async def provision_device(
     )
 
 
-@router.post("/{device_id}/assign", response_model=DeviceAssignResponse)
+@router.post("/{device_id}/assign", response_model=DeviceAssignResponse, summary="Assign a device to a plant")
 async def assign_device(
     device_id: int,
     assign_in: DeviceAssignRequest,
@@ -282,7 +282,7 @@ async def assign_device(
     )
 
 
-@router.post("/{device_id}/kill-switch")
+@router.post("/{device_id}/kill-switch", summary="Enable or disable a device remotely")
 async def kill_switch(
     device_id: int,
     kill_in: KillSwitchRequest,
@@ -328,7 +328,7 @@ async def kill_switch(
     return {"detail": f"Device {action}d successfully"}
 
 
-@router.post("/{device_id}/revoke")
+@router.post("/{device_id}/revoke", summary="Permanently revoke a device")
 async def revoke_device(
     device_id: int,
     current_user: User = Depends(require_roles(UserRole.SUPER_ADMIN, UserRole.ADMIN)),
@@ -366,7 +366,7 @@ async def revoke_device(
 # --- Device Onboarding (QR Scan / Link / Approve / QR Image) ---
 
 
-@router.post("/link", response_model=DeviceLinkResponse)
+@router.post("/link", response_model=DeviceLinkResponse, summary="Link a device to a room via QR scan")
 async def link_device(
     link_in: DeviceLinkRequest,
     current_user: User = Depends(
@@ -457,7 +457,7 @@ async def link_device(
     )
 
 
-@router.get("/pending-approval", response_model=list[PendingApprovalResponse])
+@router.get("/pending-approval", response_model=list[PendingApprovalResponse], summary="List devices awaiting approval")
 async def list_pending_approval_devices(
     current_user: User = Depends(
         require_roles(UserRole.SUPER_ADMIN, UserRole.ADMIN)
@@ -500,7 +500,7 @@ async def list_pending_approval_devices(
     ]
 
 
-@router.post("/{device_id}/approve")
+@router.post("/{device_id}/approve", summary="Approve or reject a pending device")
 async def approve_device(
     device_id: int,
     approve_in: DeviceApproveRequest,
@@ -566,7 +566,7 @@ async def approve_device(
         }
 
 
-@router.post("/{device_id}/qr-image")
+@router.post("/{device_id}/qr-image", summary="Upload a QR code image for a device")
 async def upload_qr_image(
     device_id: int,
     qr_in: QrImageUpload,
@@ -593,7 +593,7 @@ async def upload_qr_image(
     return {"detail": "QR code image saved successfully"}
 
 
-@router.get("/{device_id}/qr-image", response_model=QrImageResponse)
+@router.get("/{device_id}/qr-image", response_model=QrImageResponse, summary="Get the stored QR code image for a device")
 async def get_qr_image(
     device_id: int,
     current_user: User = Depends(get_current_user),

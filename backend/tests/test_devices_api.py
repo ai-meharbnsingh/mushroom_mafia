@@ -50,19 +50,19 @@ async def test_list_devices_as_admin(auth_client: AsyncClient):
 @pytest.mark.asyncio
 async def test_list_devices_as_owner(owner_client: AsyncClient, seed_plant_room_device):
     """GET /api/v1/devices/ — owner sees devices assigned to their plants."""
+    device_id = seed_plant_room_device["device"].device_id
     response = await owner_client.get("/api/v1/devices/")
     assert response.status_code == 200
     data = response.json()
     assert isinstance(data, list)
     assert len(data) >= 1
     device_ids = [d["device_id"] for d in data]
-    assert 100 in device_ids
+    assert device_id in device_ids
 
 
 @pytest.mark.asyncio
 async def test_assign_device_to_plant(auth_client: AsyncClient, seed_plant_room_device):
     """POST /api/v1/devices/{id}/assign — assigns device to plant, sets ACTIVE."""
-    # First provision a device
     csrf = _extract_csrf(auth_client)
     prov = await auth_client.post(
         "/api/v1/devices/provision",
@@ -75,16 +75,16 @@ async def test_assign_device_to_plant(auth_client: AsyncClient, seed_plant_room_
     )
     assert prov.status_code == 200
     device_id = prov.json()["device_id"]
+    plant_id = seed_plant_room_device["plant"].plant_id
 
-    # Assign to plant_id=1
     response = await auth_client.post(
         f"/api/v1/devices/{device_id}/assign",
-        json={"plant_id": 1},
+        json={"plant_id": plant_id},
         headers={"x-csrf-token": csrf},
     )
     assert response.status_code == 200, response.text
     data = response.json()
-    assert data["assigned_to_plant_id"] == 1
+    assert data["assigned_to_plant_id"] == plant_id
     assert data["subscription_status"] == "ACTIVE"
 
 
@@ -94,17 +94,8 @@ async def test_link_device_to_room(owner_client: AsyncClient, seed_plant_room_de
     from unittest.mock import AsyncMock, patch
 
     csrf = _extract_csrf(owner_client)
+    room_id = seed_plant_room_device["room"].room_id
 
-    # Provision a fresh device first via admin
-    from app.main import app
-    from app.database import get_db
-    from app.redis_client import get_redis
-    from tests.conftest import override_get_db, override_get_redis
-
-    app.dependency_overrides[get_db] = override_get_db
-    app.dependency_overrides[get_redis] = override_get_redis
-
-    # Provision using the owner_client (they are ADMIN role)
     prov = await owner_client.post(
         "/api/v1/devices/provision",
         json={
@@ -117,26 +108,25 @@ async def test_link_device_to_room(owner_client: AsyncClient, seed_plant_room_de
     assert prov.status_code == 200, prov.text
     license_key = prov.json()["license_key"]
 
-    # Link to room_id=1
     with patch("app.api.devices.ws_manager") as mock_ws:
         mock_ws.broadcast_to_owner = AsyncMock()
         response = await owner_client.post(
             "/api/v1/devices/link",
-            json={"license_key": license_key, "room_id": 1},
+            json={"license_key": license_key, "room_id": room_id},
             headers={"x-csrf-token": csrf},
         )
     assert response.status_code == 200, response.text
     data = response.json()
     assert data["status"] == "PENDING_APPROVAL"
-    assert data["room_id"] == 1
+    assert data["room_id"] == room_id
 
 
 @pytest.mark.asyncio
 async def test_approve_device(owner_client: AsyncClient, seed_plant_room_device):
     """POST /api/v1/devices/{id}/approve — APPROVE generates MQTT creds, sets ACTIVE."""
     csrf = _extract_csrf(owner_client)
+    room_id = seed_plant_room_device["room"].room_id
 
-    # Provision + Link
     prov = await owner_client.post(
         "/api/v1/devices/provision",
         json={
@@ -156,11 +146,10 @@ async def test_approve_device(owner_client: AsyncClient, seed_plant_room_device)
         mock_ws.broadcast_to_owner = AsyncMock()
         await owner_client.post(
             "/api/v1/devices/link",
-            json={"license_key": license_key, "room_id": 1},
+            json={"license_key": license_key, "room_id": room_id},
             headers={"x-csrf-token": csrf},
         )
 
-    # Approve
     response = await owner_client.post(
         f"/api/v1/devices/{device_id}/approve",
         json={"action": "APPROVE"},
@@ -175,6 +164,7 @@ async def test_approve_device(owner_client: AsyncClient, seed_plant_room_device)
 async def test_reject_device(owner_client: AsyncClient, seed_plant_room_device):
     """POST /api/v1/devices/{id}/approve — REJECT reverts to PENDING."""
     csrf = _extract_csrf(owner_client)
+    room_id = seed_plant_room_device["room"].room_id
 
     prov = await owner_client.post(
         "/api/v1/devices/provision",
@@ -195,7 +185,7 @@ async def test_reject_device(owner_client: AsyncClient, seed_plant_room_device):
         mock_ws.broadcast_to_owner = AsyncMock()
         await owner_client.post(
             "/api/v1/devices/link",
-            json={"license_key": license_key, "room_id": 1},
+            json={"license_key": license_key, "room_id": room_id},
             headers={"x-csrf-token": csrf},
         )
 
@@ -212,9 +202,10 @@ async def test_reject_device(owner_client: AsyncClient, seed_plant_room_device):
 @pytest.mark.asyncio
 async def test_kill_switch_disable(auth_client: AsyncClient, seed_plant_room_device):
     """POST /api/v1/devices/{id}/kill-switch — DISABLE suspends device."""
+    device_id = seed_plant_room_device["device"].device_id
     csrf = _extract_csrf(auth_client)
     response = await auth_client.post(
-        "/api/v1/devices/100/kill-switch",
+        f"/api/v1/devices/{device_id}/kill-switch",
         json={"action": "DISABLE"},
         headers={"x-csrf-token": csrf},
     )
@@ -225,9 +216,10 @@ async def test_kill_switch_disable(auth_client: AsyncClient, seed_plant_room_dev
 @pytest.mark.asyncio
 async def test_kill_switch_enable(auth_client: AsyncClient, seed_plant_room_device):
     """POST /api/v1/devices/{id}/kill-switch — ENABLE reactivates device."""
+    device_id = seed_plant_room_device["device"].device_id
     csrf = _extract_csrf(auth_client)
     response = await auth_client.post(
-        "/api/v1/devices/100/kill-switch",
+        f"/api/v1/devices/{device_id}/kill-switch",
         json={"action": "ENABLE"},
         headers={"x-csrf-token": csrf},
     )
@@ -238,8 +230,9 @@ async def test_kill_switch_enable(auth_client: AsyncClient, seed_plant_room_devi
 @pytest.mark.asyncio
 async def test_get_device_by_id(owner_client: AsyncClient, seed_plant_room_device):
     """GET /api/v1/devices/{device_id} — returns device details."""
-    response = await owner_client.get("/api/v1/devices/100")
+    device_id = seed_plant_room_device["device"].device_id
+    response = await owner_client.get(f"/api/v1/devices/{device_id}")
     assert response.status_code == 200
     data = response.json()
-    assert data["device_id"] == 100
-    assert data["device_name"] == "Seed Device"
+    assert data["device_id"] == device_id
+    assert data["device_name"] == "Test ESP32"

@@ -9,11 +9,12 @@ from tests.conftest import _extract_csrf
 @pytest.mark.asyncio
 async def test_send_relay_command(owner_client: AsyncClient, seed_plant_room_device, fake_redis_instance):
     """POST /api/v1/live/relay/{device_id} — sends relay command, logs to DB."""
+    device_id = seed_plant_room_device["device"].device_id
     csrf = _extract_csrf(owner_client)
     with patch("app.api.live.ws_manager") as mock_ws:
         mock_ws.broadcast_to_owner = AsyncMock()
         response = await owner_client.post(
-            "/api/v1/live/relay/100",
+            f"/api/v1/live/relay/{device_id}",
             json={"relay_type": "CO2", "state": True},
             headers={"x-csrf-token": csrf},
         )
@@ -24,11 +25,12 @@ async def test_send_relay_command(owner_client: AsyncClient, seed_plant_room_dev
 @pytest.mark.asyncio
 async def test_relay_command_wrong_owner(auth_client: AsyncClient, seed_plant_room_device, fake_redis_instance):
     """POST /api/v1/live/relay/{device_id} — admin on owner_id=1 gets 403 for device on owner_id=2."""
+    device_id = seed_plant_room_device["device"].device_id
     csrf = _extract_csrf(auth_client)
     with patch("app.api.live.ws_manager") as mock_ws:
         mock_ws.broadcast_to_owner = AsyncMock()
         response = await auth_client.post(
-            "/api/v1/live/relay/100",
+            f"/api/v1/live/relay/{device_id}",
             json={"relay_type": "CO2", "state": True},
             headers={"x-csrf-token": csrf},
         )
@@ -50,7 +52,8 @@ async def test_relay_command_device_not_found(owner_client: AsyncClient, seed_pl
 @pytest.mark.asyncio
 async def test_get_relay_states_empty(owner_client: AsyncClient, seed_plant_room_device, fake_redis_instance):
     """GET /api/v1/live/relay/{device_id} — returns empty relay states when Redis has no data."""
-    response = await owner_client.get("/api/v1/live/relay/100")
+    device_id = seed_plant_room_device["device"].device_id
+    response = await owner_client.get(f"/api/v1/live/relay/{device_id}")
     assert response.status_code == 200
     data = response.json()
     assert "relay_states" in data
@@ -59,9 +62,10 @@ async def test_get_relay_states_empty(owner_client: AsyncClient, seed_plant_room
 @pytest.mark.asyncio
 async def test_get_relay_states_with_data(owner_client: AsyncClient, seed_plant_room_device, fake_redis_instance):
     """GET /api/v1/live/relay/{device_id} — returns relay states from Redis."""
+    device_id = seed_plant_room_device["device"].device_id
     relay_data = {"CO2": True, "HUMIDITY": False}
-    fake_redis_instance._store["live:relay:100"] = json.dumps(relay_data)
-    response = await owner_client.get("/api/v1/live/relay/100")
+    fake_redis_instance._store[f"live:relay:{device_id}"] = json.dumps(relay_data)
+    response = await owner_client.get(f"/api/v1/live/relay/{device_id}")
     assert response.status_code == 200
     data = response.json()
     assert data["relay_states"]["CO2"] is True
@@ -70,7 +74,8 @@ async def test_get_relay_states_with_data(owner_client: AsyncClient, seed_plant_
 @pytest.mark.asyncio
 async def test_get_relay_config_defaults(owner_client: AsyncClient, seed_plant_room_device):
     """GET /api/v1/live/relay-config/{device_id} — returns 7 relay configs with defaults."""
-    response = await owner_client.get("/api/v1/live/relay-config/100")
+    device_id = seed_plant_room_device["device"].device_id
+    response = await owner_client.get(f"/api/v1/live/relay-config/{device_id}")
     assert response.status_code == 200
     data = response.json()
     assert "configs" in data
@@ -84,9 +89,10 @@ async def test_get_relay_config_defaults(owner_client: AsyncClient, seed_plant_r
 @pytest.mark.asyncio
 async def test_update_relay_config(owner_client: AsyncClient, seed_plant_room_device):
     """PUT /api/v1/live/relay-config/{device_id} — upserts relay config."""
+    device_id = seed_plant_room_device["device"].device_id
     csrf = _extract_csrf(owner_client)
     response = await owner_client.put(
-        "/api/v1/live/relay-config/100",
+        f"/api/v1/live/relay-config/{device_id}",
         json=[{
             "relay_type": "CO2",
             "mode": "AUTO",
@@ -105,9 +111,10 @@ async def test_update_relay_config(owner_client: AsyncClient, seed_plant_room_de
 @pytest.mark.asyncio
 async def test_create_relay_schedule(owner_client: AsyncClient, seed_plant_room_device):
     """POST /api/v1/live/relay-schedule/{device_id} — creates schedule with valid time."""
+    device_id = seed_plant_room_device["device"].device_id
     csrf = _extract_csrf(owner_client)
     response = await owner_client.post(
-        "/api/v1/live/relay-schedule/100",
+        f"/api/v1/live/relay-schedule/{device_id}",
         json={
             "relay_type": "CO2",
             "days_of_week": 127,
@@ -126,9 +133,10 @@ async def test_create_relay_schedule(owner_client: AsyncClient, seed_plant_room_
 @pytest.mark.asyncio
 async def test_create_relay_schedule_invalid_time(owner_client: AsyncClient, seed_plant_room_device):
     """POST /api/v1/live/relay-schedule/{device_id} — rejects invalid time format."""
+    device_id = seed_plant_room_device["device"].device_id
     csrf = _extract_csrf(owner_client)
     response = await owner_client.post(
-        "/api/v1/live/relay-schedule/100",
+        f"/api/v1/live/relay-schedule/{device_id}",
         json={
             "relay_type": "CO2",
             "days_of_week": 127,
@@ -143,10 +151,11 @@ async def test_create_relay_schedule_invalid_time(owner_client: AsyncClient, see
 @pytest.mark.asyncio
 async def test_delete_relay_schedule(owner_client: AsyncClient, seed_plant_room_device):
     """DELETE /api/v1/live/relay-schedule/{schedule_id} — deletes schedule."""
+    device_id = seed_plant_room_device["device"].device_id
     csrf = _extract_csrf(owner_client)
     # Create first
     create_resp = await owner_client.post(
-        "/api/v1/live/relay-schedule/100",
+        f"/api/v1/live/relay-schedule/{device_id}",
         json={
             "relay_type": "HUMIDITY",
             "days_of_week": 31,
@@ -170,8 +179,9 @@ async def test_delete_relay_schedule(owner_client: AsyncClient, seed_plant_room_
 @pytest.mark.asyncio
 async def test_get_live_readings(owner_client: AsyncClient, seed_plant_room_device, fake_redis_instance):
     """GET /api/v1/live/readings — returns live readings for owner's devices."""
-    reading = {"device_id": 100, "temperature": 22.0}
-    fake_redis_instance._store["live:device:100"] = json.dumps(reading)
+    device_id = seed_plant_room_device["device"].device_id
+    reading = {"device_id": device_id, "temperature": 22.0}
+    fake_redis_instance._store[f"live:device:{device_id}"] = json.dumps(reading)
     response = await owner_client.get("/api/v1/live/readings")
     assert response.status_code == 200
     data = response.json()

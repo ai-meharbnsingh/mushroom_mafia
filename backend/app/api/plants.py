@@ -15,7 +15,7 @@ from app.utils.security import hash_password
 router = APIRouter()
 
 
-@router.get("/", response_model=list[PlantResponse])
+@router.get("/", response_model=list[PlantResponse], summary="List all plants for the current user")
 async def list_plants(
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
@@ -32,7 +32,7 @@ async def list_plants(
     return result.scalars().all()
 
 
-@router.get("/{plant_id}", response_model=PlantResponse)
+@router.get("/{plant_id}", response_model=PlantResponse, summary="Get a plant by ID")
 async def get_plant(
     plant_id: int,
     current_user: User = Depends(get_current_user),
@@ -64,7 +64,7 @@ async def get_plant(
     return plant
 
 
-@router.post("/", response_model=PlantResponse, status_code=status.HTTP_201_CREATED)
+@router.post("/", response_model=PlantResponse, status_code=status.HTTP_201_CREATED, summary="Create a new plant with admin attachment")
 async def create_plant(
     plant_in: PlantCreate,
     current_user: User = Depends(
@@ -119,7 +119,7 @@ async def create_plant(
     return plant
 
 
-@router.put("/{plant_id}", response_model=PlantResponse)
+@router.put("/{plant_id}", response_model=PlantResponse, summary="Update a plant")
 async def update_plant(
     plant_id: int,
     plant_in: PlantUpdate,
@@ -150,7 +150,7 @@ async def update_plant(
     return plant
 
 
-@router.delete("/{plant_id}", status_code=status.HTTP_200_OK)
+@router.delete("/{plant_id}", status_code=status.HTTP_200_OK, summary="Soft-delete a plant")
 async def delete_plant(
     plant_id: int,
     current_user: User = Depends(
@@ -177,7 +177,7 @@ async def delete_plant(
     return {"detail": "Plant deactivated"}
 
 
-@router.get("/{plant_id}/rooms", response_model=list[RoomResponse])
+@router.get("/{plant_id}/rooms", response_model=list[RoomResponse], summary="List rooms for a plant")
 async def get_plant_rooms(
     plant_id: int,
     current_user: User = Depends(get_current_user),

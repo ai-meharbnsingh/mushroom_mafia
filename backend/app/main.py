@@ -17,6 +17,7 @@ from app.redis_client import init_redis, close_redis
 import app.redis_client as redis_client_module
 from app.services.mqtt_client import mqtt_manager
 from app.services.relay_scheduler import run_relay_scheduler
+from app.services.device_monitor import start_device_monitor, stop_device_monitor
 
 logger = logging.getLogger(__name__)
 
@@ -52,7 +53,17 @@ async def lifespan(app: FastAPI):
     except Exception as e:
         logger.warning(f"MQTT unavailable: {e}")
 
+    # Device health monitor (checks for offline devices every 5 minutes)
+    try:
+        start_device_monitor()
+        logger.info("Device monitor starting...")
+    except Exception as e:
+        logger.warning(f"Device monitor failed to start: {e}")
+
     yield
+
+    # Stop device monitor
+    stop_device_monitor()
 
     # Shutdown
     if mqtt_task:
@@ -73,6 +84,7 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(
     title="Mushroom Farm IoT Platform API",
+    description="REST API for mushroom farm IoT monitoring — manages plants, rooms, devices, sensors, relays, growth cycles, harvests, and real-time climate data.",
     version="1.0.0",
     lifespan=lifespan,
 )

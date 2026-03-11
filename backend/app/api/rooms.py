@@ -13,7 +13,7 @@ from app.api.deps import get_current_user, require_roles
 router = APIRouter()
 
 
-@router.get("/", response_model=list[RoomResponse])
+@router.get("/", response_model=list[RoomResponse], summary="List all rooms for the current user")
 async def list_rooms(
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
@@ -34,7 +34,7 @@ async def list_rooms(
     return result.scalars().all()
 
 
-@router.get("/{room_id}", response_model=RoomResponse)
+@router.get("/{room_id}", response_model=RoomResponse, summary="Get a room by ID")
 async def get_room(
     room_id: int,
     current_user: User = Depends(get_current_user),
@@ -58,7 +58,7 @@ async def get_room(
     return room
 
 
-@router.post("/", response_model=RoomResponse, status_code=status.HTTP_201_CREATED)
+@router.post("/", response_model=RoomResponse, status_code=status.HTTP_201_CREATED, summary="Create a new room in a plant")
 async def create_room(
     room_in: RoomCreate,
     current_user: User = Depends(
@@ -89,7 +89,7 @@ async def create_room(
     return room
 
 
-@router.put("/{room_id}", response_model=RoomResponse)
+@router.put("/{room_id}", response_model=RoomResponse, summary="Update a room")
 async def update_room(
     room_id: int,
     room_in: RoomUpdate,
@@ -121,7 +121,7 @@ async def update_room(
     return room
 
 
-@router.patch("/{room_id}/status", response_model=RoomResponse)
+@router.patch("/{room_id}/status", response_model=RoomResponse, summary="Change room status")
 async def change_room_status(
     room_id: int,
     status_in: RoomStatusChange,
@@ -151,7 +151,7 @@ async def change_room_status(
     return room
 
 
-@router.delete("/{room_id}", status_code=status.HTTP_200_OK)
+@router.delete("/{room_id}", status_code=status.HTTP_200_OK, summary="Soft-delete a room")
 async def delete_room(
     room_id: int,
     current_user: User = Depends(

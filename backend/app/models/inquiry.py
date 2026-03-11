@@ -1,5 +1,5 @@
 from sqlalchemy import Column, Integer, String, Text, DateTime, Enum as SAEnum
-from datetime import datetime
+from datetime import datetime, timezone
 
 from app.database import Base
 
@@ -24,4 +24,4 @@ class ContactInquiry(Base):
     phone = Column(String(50), nullable=True)
     farm_size = Column(String(50), nullable=True)
     message = Column(Text, nullable=False)
-    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), nullable=False)

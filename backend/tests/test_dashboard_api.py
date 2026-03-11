@@ -50,14 +50,15 @@ async def test_dashboard_current_readings_empty(owner_client: AsyncClient, seed_
 @pytest.mark.asyncio
 async def test_dashboard_current_readings_with_data(owner_client: AsyncClient, seed_plant_room_device, fake_redis_instance):
     """GET /api/v1/dashboard/current-readings — returns readings from Redis for owner's devices."""
-    reading = {"device_id": 100, "temperature": 25.5, "humidity": 85.0}
-    fake_redis_instance._store[f"live:device:100"] = json.dumps(reading)
+    device_id = seed_plant_room_device["device"].device_id
+    reading = {"device_id": device_id, "temperature": 25.5, "humidity": 85.0}
+    fake_redis_instance._store[f"live:device:{device_id}"] = json.dumps(reading)
 
     response = await owner_client.get("/api/v1/dashboard/current-readings")
     assert response.status_code == 200
     data = response.json()
     assert len(data["readings"]) >= 1
-    assert data["readings"][0]["device_id"] == 100
+    assert data["readings"][0]["device_id"] == device_id
 
 
 @pytest.mark.asyncio

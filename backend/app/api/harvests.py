@@ -104,7 +104,7 @@ async def list_room_harvests(
 
 @router.get("/summary", response_model=list[HarvestSummary])
 async def get_harvest_summary(
-    period: str = Query("monthly", regex="^(monthly|weekly)$"),
+    period: str = Query("monthly", pattern="^(monthly|weekly)$"),
     months: int = Query(3, ge=1, le=24),
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
@@ -129,7 +129,7 @@ async def get_harvest_summary(
 @router.get("/summary/room/{room_id}", response_model=list[HarvestSummary])
 async def get_room_harvest_summary(
     room_id: int,
-    period: str = Query("monthly", regex="^(monthly|weekly)$"),
+    period: str = Query("monthly", pattern="^(monthly|weekly)$"),
     months: int = Query(3, ge=1, le=24),
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),

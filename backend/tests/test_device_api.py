@@ -4,9 +4,16 @@ from httpx import AsyncClient
 
 
 @pytest.mark.asyncio
-async def test_poll_provisioning_not_found(client: AsyncClient):
-    """GET /api/v1/device/provision/INVALID-KEY returns 404 for unknown key."""
+async def test_poll_provisioning_invalid_format(client: AsyncClient):
+    """GET /api/v1/device/provision/INVALID-KEY returns 400 for bad key format."""
     response = await client.get("/api/v1/device/provision/INVALID-KEY")
+    assert response.status_code == 400
+
+
+@pytest.mark.asyncio
+async def test_poll_provisioning_not_found(client: AsyncClient):
+    """GET /api/v1/device/provision/LIC-XXXX-XXXX-XXXX returns 404 for unknown valid-format key."""
+    response = await client.get("/api/v1/device/provision/LIC-FAKE-FAKE-FAKE")
     assert response.status_code == 404
 
 

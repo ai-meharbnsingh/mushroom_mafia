@@ -72,7 +72,7 @@ async def _verify_device_ownership(
     return device
 
 
-@router.get("/readings")
+@router.get("/readings", summary="Get all live sensor readings for the current owner")
 async def get_all_live_readings(
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
@@ -90,7 +90,7 @@ async def get_all_live_readings(
     return {"readings": readings}
 
 
-@router.get("/readings/device/{device_id}")
+@router.get("/readings/device/{device_id}", summary="Get live reading for a specific device")
 async def get_device_live_reading(
     device_id: int,
     current_user: User = Depends(get_current_user),
@@ -110,7 +110,7 @@ async def get_device_live_reading(
     return json.loads(raw)
 
 
-@router.get("/readings/room/{room_id}")
+@router.get("/readings/room/{room_id}", summary="Get live reading for a room")
 async def get_room_live_reading(
     room_id: int,
     current_user: User = Depends(get_current_user),
@@ -145,7 +145,7 @@ async def get_room_live_reading(
     return json.loads(raw)
 
 
-@router.get("/relay/{device_id}")
+@router.get("/relay/{device_id}", summary="Get current relay states for a device")
 async def get_relay_states(
     device_id: int,
     current_user: User = Depends(get_current_user),
@@ -162,7 +162,7 @@ async def get_relay_states(
     return {"relay_states": json.loads(raw)}
 
 
-@router.post("/relay/{device_id}")
+@router.post("/relay/{device_id}", summary="Send a relay command to a device")
 async def set_relay_command(
     device_id: int,
     command: RelayCommand,
@@ -236,7 +236,7 @@ async def set_relay_command(
 # ─── Relay Config Endpoints ───────────────────────────────────────────────────
 
 
-@router.get("/relay-config/{device_id}")
+@router.get("/relay-config/{device_id}", summary="Get relay automation configs for a device")
 async def get_relay_configs(
     device_id: int,
     current_user: User = Depends(get_current_user),
@@ -282,7 +282,7 @@ async def get_relay_configs(
     return {"configs": [c.model_dump() for c in configs]}
 
 
-@router.put("/relay-config/{device_id}")
+@router.put("/relay-config/{device_id}", summary="Update relay automation configs for a device")
 async def update_relay_configs(
     device_id: int,
     configs: List[RelayConfigUpdate],
@@ -360,7 +360,7 @@ async def update_relay_configs(
     return {"status": "success", "updated": updated}
 
 
-@router.post("/relay-config/{device_id}/all-auto")
+@router.post("/relay-config/{device_id}/all-auto", summary="Set all relays to AUTO mode")
 async def set_all_relays_auto(
     device_id: int,
     current_user: User = Depends(get_current_user),
@@ -409,7 +409,7 @@ async def set_all_relays_auto(
     return {"status": "success", "mode": "AUTO"}
 
 
-@router.post("/relay-config/{device_id}/all-manual")
+@router.post("/relay-config/{device_id}/all-manual", summary="Set all relays to MANUAL mode")
 async def set_all_relays_manual(
     device_id: int,
     current_user: User = Depends(get_current_user),
@@ -455,7 +455,7 @@ async def set_all_relays_manual(
 # ─── Relay Schedule Endpoints ─────────────────────────────────────────────────
 
 
-@router.get("/relay-schedule/{device_id}")
+@router.get("/relay-schedule/{device_id}", summary="List all relay schedules for a device")
 async def get_relay_schedules(
     device_id: int,
     current_user: User = Depends(get_current_user),
@@ -484,7 +484,7 @@ async def get_relay_schedules(
     }
 
 
-@router.post("/relay-schedule/{device_id}")
+@router.post("/relay-schedule/{device_id}", summary="Create a relay schedule for a device")
 async def create_relay_schedule(
     device_id: int,
     schedule_in: RelayScheduleCreate,
@@ -543,7 +543,7 @@ async def create_relay_schedule(
     }
 
 
-@router.put("/relay-schedule/{schedule_id}")
+@router.put("/relay-schedule/{schedule_id}", summary="Update a relay schedule")
 async def update_relay_schedule(
     schedule_id: int,
     schedule_in: RelayScheduleUpdate,
@@ -588,7 +588,7 @@ async def update_relay_schedule(
     }
 
 
-@router.delete("/relay-schedule/{schedule_id}")
+@router.delete("/relay-schedule/{schedule_id}", summary="Delete a relay schedule")
 async def delete_relay_schedule(
     schedule_id: int,
     current_user: User = Depends(get_current_user),

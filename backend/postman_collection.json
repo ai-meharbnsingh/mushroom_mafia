@@ -1,0 +1,2379 @@
+{
+  "info": {
+    "name": "Mushroom Farm IoT Platform API",
+    "description": "Complete API collection for the Mushroom Farm IoT Monitoring Platform.\n\nCovers authentication, plant/room/device management, live sensor readings, relay control, growth cycles, harvests, firmware OTA, alerts, climate advisory, reports, thresholds, health checks, device provisioning (ESP32), and contact inquiries.\n\nAuth: Cookie-based JWT (access_token httpOnly cookie set on login). CSRF token required for state-changing requests.\n\nDefault credentials: admin / admin123",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
+    "_postman_id": "mushroom-iot-platform-v1"
+  },
+  "variable": [
+    {
+      "key": "base_url",
+      "value": "http://localhost:3800/api/v1",
+      "type": "string"
+    },
+    {
+      "key": "csrf_token",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "device_key",
+      "value": "",
+      "type": "string",
+      "description": "Device secret key for ESP32 device API auth"
+    }
+  ],
+  "item": [
+    {
+      "name": "Auth",
+      "description": "Authentication endpoints: login, logout, refresh tokens, get current user, and change password.",
+      "item": [
+        {
+          "name": "Login",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "// Extract CSRF token from Set-Cookie header",
+                  "const cookies = pm.response.headers.filter(h => h.key === 'set-cookie');",
+                  "for (const cookie of cookies) {",
+                  "    const match = cookie.value.match(/csrf_token=([^;]+)/);",
+                  "    if (match) {",
+                  "        pm.collectionVariables.set('csrf_token', match[1]);",
+                  "        console.log('CSRF token extracted and saved');",
+                  "    }",
+                  "}",
+                  "",
+                  "pm.test('Login successful', function() {",
+                  "    pm.response.to.have.status(200);",
+                  "    const json = pm.response.json();",
+                  "    pm.expect(json).to.have.property('access_token');",
+                  "    pm.expect(json).to.have.property('user');",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"username\": \"admin\",\n  \"password\": \"admin123\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/auth/login",
+              "host": ["{{base_url}}"],
+              "path": ["auth", "login"]
+            },
+            "description": "Authenticate with username/password. Sets httpOnly cookies: access_token, refresh_token, csrf_token. Rate limited: 5 requests/minute."
+          }
+        },
+        {
+          "name": "Get Current User",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "x-csrf-token",
+                "value": "{{csrf_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/auth/me",
+              "host": ["{{base_url}}"],
+              "path": ["auth", "me"]
+            },
+            "description": "Return the currently authenticated user's profile info."
+          }
+        },
+        {
+          "name": "Refresh Token",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const cookies = pm.response.headers.filter(h => h.key === 'set-cookie');",
+                  "for (const cookie of cookies) {",
+                  "    const match = cookie.value.match(/csrf_token=([^;]+)/);",
+                  "    if (match) {",
+                  "        pm.collectionVariables.set('csrf_token', match[1]);",
+                  "    }",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{}"
+            },
+            "url": {
+              "raw": "{{base_url}}/auth/refresh",
+              "host": ["{{base_url}}"],
+              "path": ["auth", "refresh"]
+            },
+            "description": "Validate the refresh_token cookie and issue new access + refresh tokens. Optionally pass refresh_token in body."
+          }
+        },
+        {
+          "name": "Change Password",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "x-csrf-token",
+                "value": "{{csrf_token}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"old_password\": \"admin123\",\n  \"new_password\": \"newSecurePass456!\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/auth/change-password",
+              "host": ["{{base_url}}"],
+              "path": ["auth", "change-password"]
+            },
+            "description": "Change the current user's password. Requires old_password for verification."
+          }
+        },
+        {
+          "name": "Logout",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "x-csrf-token",
+                "value": "{{csrf_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/auth/logout",
+              "host": ["{{base_url}}"],
+              "path": ["auth", "logout"]
+            },
+            "description": "Logout the current user. Clears access_token, refresh_token, and csrf_token cookies."
+          }
+        }
+      ]
+    },
+    {
+      "name": "Plants",
+      "description": "Manage mushroom farm plants (facilities). Plants are top-level organizational units containing rooms.",
+      "item": [
+        {
+          "name": "List Plants",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "x-csrf-token",
+                "value": "{{csrf_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/plants/",
+              "host": ["{{base_url}}"],
+              "path": ["plants", ""]
+            },
+            "description": "List all plants for the current user's organization. Non-admin users see only their assigned plants."
+          }
+        },
+        {
+          "name": "Get Plant by ID",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "x-csrf-token",
+                "value": "{{csrf_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/plants/1",
+              "host": ["{{base_url}}"],
+              "path": ["plants", "1"]
+            },
+            "description": "Get a specific plant by ID. Ownership check applied."
+          }
+        },
+        {
+          "name": "Create Plant (with existing admin)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "x-csrf-token",
+                "value": "{{csrf_token}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"owner_id\": 1,\n  \"plant_name\": \"Kimandi Oyster Farm\",\n  \"plant_code\": \"KOF-001\",\n  \"plant_type\": \"OYSTER\",\n  \"location\": \"Warehouse Block A\",\n  \"address\": \"Plot 42, Industrial Area\",\n  \"city\": \"Thika\",\n  \"state\": \"Kiambu\",\n  \"pincode\": \"100100\",\n  \"latitude\": -1.0396,\n  \"longitude\": 37.0900,\n  \"plant_size_sqft\": 5000.0,\n  \"no_of_rooms\": 8,\n  \"established_date\": \"2025-01-15\",\n  \"admin_user_id\": 1\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/plants/",
+              "host": ["{{base_url}}"],
+              "path": ["plants", ""]
+            },
+            "description": "Create a new plant with an existing admin user attached. ADMIN+ only. Provide either admin_user_id OR new_admin (not both). Plant types: OYSTER, BUTTON, SHIITAKE, MIXED."
+          }
+        },
+        {
+          "name": "Create Plant (with new admin inline)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "x-csrf-token",
+                "value": "{{csrf_token}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"owner_id\": 1,\n  \"plant_name\": \"Nanyuki Shiitake Farm\",\n  \"plant_code\": \"NSF-002\",\n  \"plant_type\": \"SHIITAKE\",\n  \"location\": \"North Wing\",\n  \"address\": \"Nanyuki Road, Laikipia\",\n  \"city\": \"Nanyuki\",\n  \"state\": \"Laikipia\",\n  \"pincode\": \"100200\",\n  \"plant_size_sqft\": 3000.0,\n  \"no_of_rooms\": 4,\n  \"new_admin\": {\n    \"username\": \"nanyuki_admin\",\n    \"email\": \"admin@nanyukifarm.co.ke\",\n    \"password\": \"SecureFarm2025!\",\n    \"first_name\": \"James\",\n    \"last_name\": \"Mwangi\",\n    \"mobile\": \"+254712345678\"\n  }\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/plants/",
+              "host": ["{{base_url}}"],
+              "path": ["plants", ""]
+            },
+            "description": "Create a new plant with a new admin user created inline. The new user gets ADMIN role and the plant auto-assigned."
+          }
+        },
+        {
+          "name": "Update Plant",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "x-csrf-token",
+                "value": "{{csrf_token}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"plant_name\": \"Kimandi Oyster & Button Farm\",\n  \"plant_type\": \"MIXED\",\n  \"plant_size_sqft\": 6500.0,\n  \"no_of_rooms\": 10\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/plants/1",
+              "host": ["{{base_url}}"],
+              "path": ["plants", "1"]
+            },
+            "description": "Update plant details. Partial update supported. ADMIN+ only."
+          }
+        },
+        {
+          "name": "Delete Plant (soft)",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "x-csrf-token",
+                "value": "{{csrf_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/plants/1",
+              "host": ["{{base_url}}"],
+              "path": ["plants", "1"]
+            },
+            "description": "Soft-delete a plant (sets is_active=false). ADMIN+ only."
+          }
+        },
+        {
+          "name": "List Plant Rooms",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "x-csrf-token",
+                "value": "{{csrf_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/plants/1/rooms",
+              "host": ["{{base_url}}"],
+              "path": ["plants", "1", "rooms"]
+            },
+            "description": "Get all active rooms for a specific plant."
+          }
+        }
+      ]
+    },
+    {
+      "name": "Rooms",
+      "description": "Manage grow rooms within plants. Room types: SPAWN_RUN, FRUITING, INCUBATION, STORAGE.",
+      "item": [
+        {
+          "name": "List Rooms",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "x-csrf-token",
+                "value": "{{csrf_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/rooms/",
+              "host": ["{{base_url}}"],
+              "path": ["rooms", ""]
+            },
+            "description": "List all rooms for the current user's organization."
+          }
+        },
+        {
+          "name": "Get Room by ID",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "x-csrf-token",
+                "value": "{{csrf_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/rooms/1",
+              "host": ["{{base_url}}"],
+              "path": ["rooms", "1"]
+            },
+            "description": "Get a specific room by ID. Owner check via plant."
+          }
+        },
+        {
+          "name": "Create Room",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "x-csrf-token",
+                "value": "{{csrf_token}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"plant_id\": 1,\n  \"room_name\": \"Fruiting Room Alpha\",\n  \"room_code\": \"FR-A01\",\n  \"room_type\": \"FRUITING\",\n  \"room_size_sqft\": 400.0,\n  \"no_of_racks\": 12,\n  \"no_of_bags\": 480,\n  \"bags_per_rack\": 40,\n  \"floor_number\": 1\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/rooms/",
+              "host": ["{{base_url}}"],
+              "path": ["rooms", ""]
+            },
+            "description": "Create a new room in a plant. ADMIN/MANAGER. Room types: SPAWN_RUN, FRUITING, INCUBATION, STORAGE."
+          }
+        },
+        {
+          "name": "Update Room",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "x-csrf-token",
+                "value": "{{csrf_token}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"room_name\": \"Fruiting Room Alpha (Expanded)\",\n  \"room_size_sqft\": 500.0,\n  \"no_of_racks\": 16,\n  \"no_of_bags\": 640\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/rooms/1",
+              "host": ["{{base_url}}"],
+              "path": ["rooms", "1"]
+            },
+            "description": "Update room details. ADMIN/MANAGER."
+          }
+        },
+        {
+          "name": "Change Room Status",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "x-csrf-token",
+                "value": "{{csrf_token}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"status\": \"MAINTENANCE\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/rooms/1/status",
+              "host": ["{{base_url}}"],
+              "path": ["rooms", "1", "status"]
+            },
+            "description": "Change room status. SUPER_ADMIN only. Statuses: ACTIVE, SUSPENDED, MAINTENANCE, INACTIVE."
+          }
+        },
+        {
+          "name": "Delete Room (soft)",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "x-csrf-token",
+                "value": "{{csrf_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/rooms/1",
+              "host": ["{{base_url}}"],
+              "path": ["rooms", "1"]
+            },
+            "description": "Soft-delete a room. ADMIN+ only."
+          }
+        }
+      ]
+    },
+    {
+      "name": "Devices",
+      "description": "Manage IoT devices (ESP32 sensors/actuators). Includes provisioning, assignment, linking, approval, kill-switch, and QR code management.",
+      "item": [
+        {
+          "name": "List Devices",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "x-csrf-token",
+                "value": "{{csrf_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/devices/",
+              "host": ["{{base_url}}"],
+              "path": ["devices", ""]
+            },
+            "description": "List all devices for the current user. Includes both assigned (via rooms) and unassigned devices."
+          }
+        },
+        {
+          "name": "Get Device by ID",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "x-csrf-token",
+                "value": "{{csrf_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/devices/1",
+              "host": ["{{base_url}}"],
+              "path": ["devices", "1"]
+            },
+            "description": "Get a specific device by ID with ownership verification."
+          }
+        },
+        {
+          "name": "Provision New Device",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "x-csrf-token",
+                "value": "{{csrf_token}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"mac_address\": \"AA:BB:CC:DD:EE:01\",\n  \"device_name\": \"Sensor Node FR-A01\",\n  \"device_type\": \"ESP32\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/devices/provision",
+              "host": ["{{base_url}}"],
+              "path": ["devices", "provision"]
+            },
+            "description": "Provision a new device (factory step). ADMIN+ only. Auto-generates a license_key. Device starts with PENDING status. Device types: ESP32, ESP8266, ARDUINO, PLC."
+          }
+        },
+        {
+          "name": "Assign Device to Plant",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "x-csrf-token",
+                "value": "{{csrf_token}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"plant_id\": 1\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/devices/1/assign",
+              "host": ["{{base_url}}"],
+              "path": ["devices", "1", "assign"]
+            },
+            "description": "Assign a device to a plant. ADMIN+ only. Generates MQTT credentials and sets status to ACTIVE."
+          }
+        },
+        {
+          "name": "Update Device",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "x-csrf-token",
+                "value": "{{csrf_token}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"room_id\": 1,\n  \"device_name\": \"Fruiting Room Alpha Sensor\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/devices/1",
+              "host": ["{{base_url}}"],
+              "path": ["devices", "1"]
+            },
+            "description": "Update device details or assign to a room. ADMIN/MANAGER."
+          }
+        },
+        {
+          "name": "Link Device to Room (QR Scan)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "x-csrf-token",
+                "value": "{{csrf_token}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"license_key\": \"LIC-ABCD-1234-WXYZ\",\n  \"room_id\": 1\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/devices/link",
+              "host": ["{{base_url}}"],
+              "path": ["devices", "link"]
+            },
+            "description": "Link a PENDING device to a room via QR scan. Sets status to PENDING_APPROVAL. ADMIN+ only."
+          }
+        },
+        {
+          "name": "List Pending Devices",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "x-csrf-token",
+                "value": "{{csrf_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/devices/pending",
+              "host": ["{{base_url}}"],
+              "path": ["devices", "pending"]
+            },
+            "description": "List devices with PENDING subscription status. ADMIN+ only."
+          }
+        },
+        {
+          "name": "List Devices Pending Approval",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "x-csrf-token",
+                "value": "{{csrf_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/devices/pending-approval",
+              "host": ["{{base_url}}"],
+              "path": ["devices", "pending-approval"]
+            },
+            "description": "List devices awaiting admin approval (PENDING_APPROVAL status). ADMIN+ only."
+          }
+        },
+        {
+          "name": "Approve Device",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "x-csrf-token",
+                "value": "{{csrf_token}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"action\": \"APPROVE\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/devices/1/approve",
+              "host": ["{{base_url}}"],
+              "path": ["devices", "1", "approve"]
+            },
+            "description": "Approve or reject a PENDING_APPROVAL device. ADMIN+ only. APPROVE generates MQTT credentials; REJECT reverts to PENDING."
+          }
+        },
+        {
+          "name": "Kill Switch (Disable Device)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "x-csrf-token",
+                "value": "{{csrf_token}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"action\": \"DISABLE\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/devices/1/kill-switch",
+              "host": ["{{base_url}}"],
+              "path": ["devices", "1", "kill-switch"]
+            },
+            "description": "Enable or disable a device remotely. ADMIN+ only. DISABLE suspends the device; ENABLE reactivates it. Publishes MQTT control command."
+          }
+        },
+        {
+          "name": "Revoke Device (Permanent)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "x-csrf-token",
+                "value": "{{csrf_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/devices/1/revoke",
+              "host": ["{{base_url}}"],
+              "path": ["devices", "1", "revoke"]
+            },
+            "description": "Permanently revoke a device. ADMIN+ only. Sets subscription to EXPIRED, deactivates device, publishes DISABLE via MQTT."
+          }
+        },
+        {
+          "name": "Upload QR Code Image",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "x-csrf-token",
+                "value": "{{csrf_token}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"image\": \"data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/devices/1/qr-image",
+              "host": ["{{base_url}}"],
+              "path": ["devices", "1", "qr-image"]
+            },
+            "description": "Upload a QR code image (base64 PNG) for a device. ADMIN+ only."
+          }
+        },
+        {
+          "name": "Get QR Code Image",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "x-csrf-token",
+                "value": "{{csrf_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/devices/1/qr-image",
+              "host": ["{{base_url}}"],
+              "path": ["devices", "1", "qr-image"]
+            },
+            "description": "Get the stored QR code image (base64) for a device."
+          }
+        },
+        {
+          "name": "Delete Device (soft)",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "x-csrf-token",
+                "value": "{{csrf_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/devices/1",
+              "host": ["{{base_url}}"],
+              "path": ["devices", "1"]
+            },
+            "description": "Deactivate a device. ADMIN+ only."
+          }
+        }
+      ]
+    },
+    {
+      "name": "Live Data & Relay Control",
+      "description": "Live sensor readings from Redis, relay state management, relay automation config, and relay scheduling.",
+      "item": [
+        {
+          "name": "Get All Live Readings",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "x-csrf-token",
+                "value": "{{csrf_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/live/readings",
+              "host": ["{{base_url}}"],
+              "path": ["live", "readings"]
+            },
+            "description": "Get all live sensor readings from Redis for the current owner's devices."
+          }
+        },
+        {
+          "name": "Get Device Live Reading",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "x-csrf-token",
+                "value": "{{csrf_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/live/readings/device/1",
+              "host": ["{{base_url}}"],
+              "path": ["live", "readings", "device", "1"]
+            },
+            "description": "Get a single device's live reading from Redis."
+          }
+        },
+        {
+          "name": "Get Room Live Reading",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "x-csrf-token",
+                "value": "{{csrf_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/live/readings/room/1",
+              "host": ["{{base_url}}"],
+              "path": ["live", "readings", "room", "1"]
+            },
+            "description": "Get a room's live reading from Redis."
+          }
+        },
+        {
+          "name": "Get Relay States",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "x-csrf-token",
+                "value": "{{csrf_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/live/relay/1",
+              "host": ["{{base_url}}"],
+              "path": ["live", "relay", "1"]
+            },
+            "description": "Get current relay states for a device from Redis."
+          }
+        },
+        {
+          "name": "Send Relay Command",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "x-csrf-token",
+                "value": "{{csrf_token}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"relay_type\": \"HUMIDITY\",\n  \"state\": true\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/live/relay/1",
+              "host": ["{{base_url}}"],
+              "path": ["live", "relay", "1"]
+            },
+            "description": "Send a relay command to a device. Writes to Redis (30s TTL) and publishes via MQTT if device uses MQTT mode. Relay types: CO2, HUMIDITY, TEMPERATURE, AHU, HUMIDIFIER, DUCT_FAN, EXTRA."
+          }
+        },
+        {
+          "name": "Get Relay Configs",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "x-csrf-token",
+                "value": "{{csrf_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/live/relay-config/1",
+              "host": ["{{base_url}}"],
+              "path": ["live", "relay-config", "1"]
+            },
+            "description": "Get relay automation configs for a device. Returns all 7 relay types with mode (MANUAL/AUTO/SCHEDULE)."
+          }
+        },
+        {
+          "name": "Update Relay Configs",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "x-csrf-token",
+                "value": "{{csrf_token}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "[\n  {\n    \"relay_type\": \"CO2\",\n    \"mode\": \"AUTO\",\n    \"threshold_param\": \"CO2\",\n    \"action_on_high\": \"ON\",\n    \"action_on_low\": \"OFF\"\n  },\n  {\n    \"relay_type\": \"HUMIDITY\",\n    \"mode\": \"AUTO\",\n    \"threshold_param\": \"HUMIDITY\",\n    \"action_on_high\": \"ON\",\n    \"action_on_low\": \"OFF\"\n  },\n  {\n    \"relay_type\": \"TEMPERATURE\",\n    \"mode\": \"SCHEDULE\",\n    \"threshold_param\": \"TEMPERATURE\",\n    \"action_on_high\": \"ON\",\n    \"action_on_low\": \"OFF\"\n  }\n]"
+            },
+            "url": {
+              "raw": "{{base_url}}/live/relay-config/1",
+              "host": ["{{base_url}}"],
+              "path": ["live", "relay-config", "1"]
+            },
+            "description": "Upsert relay automation configs for a device. Modes: MANUAL, AUTO, SCHEDULE. Threshold params: CO2, HUMIDITY, TEMPERATURE."
+          }
+        },
+        {
+          "name": "Set All Relays to AUTO",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "x-csrf-token",
+                "value": "{{csrf_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/live/relay-config/1/all-auto",
+              "host": ["{{base_url}}"],
+              "path": ["live", "relay-config", "1", "all-auto"]
+            },
+            "description": "Set all relays to AUTO mode with default parameter mappings."
+          }
+        },
+        {
+          "name": "Set All Relays to MANUAL",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "x-csrf-token",
+                "value": "{{csrf_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/live/relay-config/1/all-manual",
+              "host": ["{{base_url}}"],
+              "path": ["live", "relay-config", "1", "all-manual"]
+            },
+            "description": "Set all relays to MANUAL mode."
+          }
+        },
+        {
+          "name": "List Relay Schedules",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "x-csrf-token",
+                "value": "{{csrf_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/live/relay-schedule/1",
+              "host": ["{{base_url}}"],
+              "path": ["live", "relay-schedule", "1"]
+            },
+            "description": "List all relay schedules for a device."
+          }
+        },
+        {
+          "name": "Create Relay Schedule",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "x-csrf-token",
+                "value": "{{csrf_token}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"relay_type\": \"AHU\",\n  \"days_of_week\": 127,\n  \"time_on\": \"06:00\",\n  \"time_off\": \"18:00\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/live/relay-schedule/1",
+              "host": ["{{base_url}}"],
+              "path": ["live", "relay-schedule", "1"]
+            },
+            "description": "Create a relay schedule for a device. days_of_week is a bitmask (127 = all days, Mon=1 to Sun=64). Time format: HH:MM."
+          }
+        },
+        {
+          "name": "Update Relay Schedule",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "x-csrf-token",
+                "value": "{{csrf_token}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"days_of_week\": 31,\n  \"time_on\": \"07:00\",\n  \"time_off\": \"19:00\",\n  \"is_active\": true\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/live/relay-schedule/1",
+              "host": ["{{base_url}}"],
+              "path": ["live", "relay-schedule", "1"]
+            },
+            "description": "Update an existing relay schedule. Partial update supported."
+          }
+        },
+        {
+          "name": "Delete Relay Schedule",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "x-csrf-token",
+                "value": "{{csrf_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/live/relay-schedule/1",
+              "host": ["{{base_url}}"],
+              "path": ["live", "relay-schedule", "1"]
+            },
+            "description": "Delete a relay schedule."
+          }
+        }
+      ]
+    },
+    {
+      "name": "Dashboard",
+      "description": "Dashboard summary endpoints for overview counts, admin analytics, and per-plant dashboards.",
+      "item": [
+        {
+          "name": "Get Dashboard Summary",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "x-csrf-token",
+                "value": "{{csrf_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/dashboard/summary",
+              "host": ["{{base_url}}"],
+              "path": ["dashboard", "summary"]
+            },
+            "description": "Get dashboard summary counts: total_plants, total_rooms, total_devices, active_devices, active_alerts, critical_alerts. Filtered by owner and assigned plants."
+          }
+        },
+        {
+          "name": "Get Current Readings",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "x-csrf-token",
+                "value": "{{csrf_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/dashboard/current-readings",
+              "host": ["{{base_url}}"],
+              "path": ["dashboard", "current-readings"]
+            },
+            "description": "Get all live sensor readings from Redis for the current owner's devices. Returns array of reading objects."
+          }
+        },
+        {
+          "name": "Get Admin Dashboard",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "x-csrf-token",
+                "value": "{{csrf_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/dashboard/admin-summary",
+              "host": ["{{base_url}}"],
+              "path": ["dashboard", "admin-summary"]
+            },
+            "description": "Comprehensive admin dashboard with device status breakdown, subscription breakdown, room type breakdown, alert summary, per-plant overviews, and recent device events. ADMIN+ only."
+          }
+        },
+        {
+          "name": "Get Plant Dashboard",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "x-csrf-token",
+                "value": "{{csrf_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/dashboard/plant/1",
+              "host": ["{{base_url}}"],
+              "path": ["dashboard", "plant", "1"]
+            },
+            "description": "Get plant-specific dashboard data: room summaries with device info, device counts, alert counts."
+          }
+        }
+      ]
+    },
+    {
+      "name": "Growth Cycles",
+      "description": "Manage growth cycle lifecycle for rooms. Stages: INOCULATION -> SPAWN_RUN -> INCUBATION -> FRUITING -> HARVEST -> IDLE.",
+      "item": [
+        {
+          "name": "Create Growth Cycle",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "x-csrf-token",
+                "value": "{{csrf_token}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"room_id\": 1,\n  \"current_stage\": \"INOCULATION\",\n  \"expected_harvest_date\": \"2026-05-01T00:00:00Z\",\n  \"target_yield_kg\": 120.5,\n  \"notes\": \"Oyster mushroom batch #42 - Blue Oyster variety. Substrate: pasteurized straw.\",\n  \"auto_adjust_thresholds\": true\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/growth-cycles/",
+              "host": ["{{base_url}}"],
+              "path": ["growth-cycles", ""]
+            },
+            "description": "Start a new growth cycle for a room. Auto-deactivates any existing active cycle. ADMIN/MANAGER."
+          }
+        },
+        {
+          "name": "Advance Growth Stage",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "x-csrf-token",
+                "value": "{{csrf_token}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"notes\": \"Mycelium fully colonized. Moving to fruiting conditions.\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/growth-cycles/1/advance",
+              "host": ["{{base_url}}"],
+              "path": ["growth-cycles", "1", "advance"]
+            },
+            "description": "Advance a growth cycle to the next stage. Optionally specify current_stage to jump to a specific stage. Triggers climate advisory auto-adjustment."
+          }
+        },
+        {
+          "name": "Advance to Specific Stage",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "x-csrf-token",
+                "value": "{{csrf_token}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"current_stage\": \"FRUITING\",\n  \"notes\": \"Skipping directly to fruiting - pre-colonized blocks received from supplier.\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/growth-cycles/1/advance",
+              "host": ["{{base_url}}"],
+              "path": ["growth-cycles", "1", "advance"]
+            },
+            "description": "Jump a growth cycle to a specific stage instead of sequential advancement."
+          }
+        },
+        {
+          "name": "Get Current Cycle for Room",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "x-csrf-token",
+                "value": "{{csrf_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/growth-cycles/room/1/current",
+              "host": ["{{base_url}}"],
+              "path": ["growth-cycles", "room", "1", "current"]
+            },
+            "description": "Get the current active growth cycle for a specific room."
+          }
+        },
+        {
+          "name": "List Room Cycles (History)",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "x-csrf-token",
+                "value": "{{csrf_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/growth-cycles/room/1?limit=20&offset=0",
+              "host": ["{{base_url}}"],
+              "path": ["growth-cycles", "room", "1"],
+              "query": [
+                {
+                  "key": "limit",
+                  "value": "20"
+                },
+                {
+                  "key": "offset",
+                  "value": "0"
+                }
+              ]
+            },
+            "description": "List all growth cycles for a room, newest first. Supports pagination."
+          }
+        }
+      ]
+    },
+    {
+      "name": "Harvests",
+      "description": "Log and track harvest yields with grade classification (A, B, C) and summary analytics.",
+      "item": [
+        {
+          "name": "Create Harvest Entry",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "x-csrf-token",
+                "value": "{{csrf_token}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"room_id\": 1,\n  \"weight_kg\": 32.5,\n  \"grade\": \"A\",\n  \"notes\": \"First flush - Blue Oyster. Excellent cap formation, uniform size. Average cap diameter 8-10cm.\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/harvests/",
+              "host": ["{{base_url}}"],
+              "path": ["harvests", ""]
+            },
+            "description": "Log a new harvest entry. OPERATOR+ role. Grades: A (premium), B (standard), C (processing grade). Weight in kg."
+          }
+        },
+        {
+          "name": "List Room Harvests",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "x-csrf-token",
+                "value": "{{csrf_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/harvests/room/1?limit=50&offset=0",
+              "host": ["{{base_url}}"],
+              "path": ["harvests", "room", "1"],
+              "query": [
+                {
+                  "key": "limit",
+                  "value": "50"
+                },
+                {
+                  "key": "offset",
+                  "value": "0"
+                }
+              ]
+            },
+            "description": "List harvests for a specific room, newest first."
+          }
+        },
+        {
+          "name": "Get Harvest Summary (All Rooms)",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "x-csrf-token",
+                "value": "{{csrf_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/harvests/summary?period=monthly&months=6",
+              "host": ["{{base_url}}"],
+              "path": ["harvests", "summary"],
+              "query": [
+                {
+                  "key": "period",
+                  "value": "monthly",
+                  "description": "monthly or weekly"
+                },
+                {
+                  "key": "months",
+                  "value": "6",
+                  "description": "Lookback period in months (1-24)"
+                }
+              ]
+            },
+            "description": "Get yield summary across all rooms, grouped by period (monthly/weekly). Includes total weight, harvest count, and grade breakdown."
+          }
+        },
+        {
+          "name": "Get Room Harvest Summary",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "x-csrf-token",
+                "value": "{{csrf_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/harvests/summary/room/1?period=weekly&months=3",
+              "host": ["{{base_url}}"],
+              "path": ["harvests", "summary", "room", "1"],
+              "query": [
+                {
+                  "key": "period",
+                  "value": "weekly"
+                },
+                {
+                  "key": "months",
+                  "value": "3"
+                }
+              ]
+            },
+            "description": "Get yield summary for a specific room, grouped by period."
+          }
+        }
+      ]
+    },
+    {
+      "name": "Alerts",
+      "description": "View, acknowledge, and resolve sensor/device alerts. Alert types: CO2_HIGH, CO2_LOW, TEMP_HIGH, TEMP_LOW, HUMIDITY_HIGH, HUMIDITY_LOW, DEVICE_OFFLINE, SENSOR_ERROR.",
+      "item": [
+        {
+          "name": "List Alerts",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "x-csrf-token",
+                "value": "{{csrf_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/alerts/?severity=CRITICAL&is_resolved=false&limit=50&offset=0",
+              "host": ["{{base_url}}"],
+              "path": ["alerts", ""],
+              "query": [
+                {
+                  "key": "severity",
+                  "value": "CRITICAL",
+                  "description": "Filter: INFO, WARNING, CRITICAL"
+                },
+                {
+                  "key": "is_resolved",
+                  "value": "false",
+                  "description": "Filter: true or false"
+                },
+                {
+                  "key": "limit",
+                  "value": "50"
+                },
+                {
+                  "key": "offset",
+                  "value": "0"
+                }
+              ]
+            },
+            "description": "List alerts filtered by owner. Optional filters: severity, is_resolved, limit, offset."
+          }
+        },
+        {
+          "name": "List Active Alerts",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "x-csrf-token",
+                "value": "{{csrf_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/alerts/active",
+              "host": ["{{base_url}}"],
+              "path": ["alerts", "active"]
+            },
+            "description": "List all unresolved (active) alerts."
+          }
+        },
+        {
+          "name": "Get Alert by ID",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "x-csrf-token",
+                "value": "{{csrf_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/alerts/1",
+              "host": ["{{base_url}}"],
+              "path": ["alerts", "1"]
+            },
+            "description": "Get a specific alert by ID."
+          }
+        },
+        {
+          "name": "Acknowledge Alert",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "x-csrf-token",
+                "value": "{{csrf_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/alerts/1/acknowledge",
+              "host": ["{{base_url}}"],
+              "path": ["alerts", "1", "acknowledge"]
+            },
+            "description": "Acknowledge an alert (set is_read=true). OPERATOR+ role."
+          }
+        },
+        {
+          "name": "Resolve Alert",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "x-csrf-token",
+                "value": "{{csrf_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/alerts/1/resolve",
+              "host": ["{{base_url}}"],
+              "path": ["alerts", "1", "resolve"]
+            },
+            "description": "Resolve an alert (set is_resolved=true). MANAGER+ role."
+          }
+        }
+      ]
+    },
+    {
+      "name": "Thresholds",
+      "description": "Manage sensor threshold configurations per room. Parameters: CO2, HUMIDITY, TEMPERATURE.",
+      "item": [
+        {
+          "name": "Get Room Thresholds",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "x-csrf-token",
+                "value": "{{csrf_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/thresholds/room/1",
+              "host": ["{{base_url}}"],
+              "path": ["thresholds", "room", "1"]
+            },
+            "description": "Get all threshold configurations for a room (CO2, HUMIDITY, TEMPERATURE)."
+          }
+        },
+        {
+          "name": "Update Room Thresholds",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "x-csrf-token",
+                "value": "{{csrf_token}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"thresholds\": [\n    {\n      \"parameter\": \"CO2\",\n      \"min_value\": 400,\n      \"max_value\": 1200,\n      \"hysteresis\": 50,\n      \"is_active\": true\n    },\n    {\n      \"parameter\": \"HUMIDITY\",\n      \"min_value\": 80,\n      \"max_value\": 95,\n      \"hysteresis\": 3,\n      \"is_active\": true\n    },\n    {\n      \"parameter\": \"TEMPERATURE\",\n      \"min_value\": 18,\n      \"max_value\": 24,\n      \"hysteresis\": 1.5,\n      \"is_active\": true\n    }\n  ]\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/thresholds/room/1",
+              "host": ["{{base_url}}"],
+              "path": ["thresholds", "room", "1"]
+            },
+            "description": "Update thresholds for a room. ADMIN/MANAGER. Publishes updated config to devices via MQTT."
+          }
+        }
+      ]
+    },
+    {
+      "name": "Firmware OTA",
+      "description": "Firmware management: upload binaries, list versions, trigger OTA rollouts, track update status. Supports both disk-based and DB-based firmware storage.",
+      "item": [
+        {
+          "name": "Upload Firmware (disk)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "x-csrf-token",
+                "value": "{{csrf_token}}"
+              }
+            ],
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                {
+                  "key": "file",
+                  "type": "file",
+                  "description": "Firmware .bin file"
+                },
+                {
+                  "key": "version",
+                  "value": "1.2.0",
+                  "type": "text"
+                },
+                {
+                  "key": "release_notes",
+                  "value": "Added relay ACK confirmation, improved WiFi reconnection logic, EEPROM state persistence for all 7 relays.",
+                  "type": "text"
+                }
+              ]
+            },
+            "url": {
+              "raw": "{{base_url}}/firmware/upload",
+              "host": ["{{base_url}}"],
+              "path": ["firmware", "upload"]
+            },
+            "description": "Upload a firmware .bin file to disk. ADMIN+ only. Computes SHA256 checksum. Marks previous versions as inactive."
+          }
+        },
+        {
+          "name": "List Firmware Versions",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "x-csrf-token",
+                "value": "{{csrf_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/firmware/",
+              "host": ["{{base_url}}"],
+              "path": ["firmware", ""]
+            },
+            "description": "List all firmware versions, newest first."
+          }
+        },
+        {
+          "name": "Get Latest Firmware (device auth)",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "X-Device-ID",
+                "value": "1"
+              },
+              {
+                "key": "X-Device-Key",
+                "value": "{{device_key}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/firmware/latest",
+              "host": ["{{base_url}}"],
+              "path": ["firmware", "latest"]
+            },
+            "description": "Get latest active firmware version metadata. Requires device auth headers (X-Device-ID, X-Device-Key)."
+          }
+        },
+        {
+          "name": "Download Firmware (device auth)",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "X-Device-ID",
+                "value": "1"
+              },
+              {
+                "key": "X-Device-Key",
+                "value": "{{device_key}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/firmware/1/download",
+              "host": ["{{base_url}}"],
+              "path": ["firmware", "1", "download"]
+            },
+            "description": "Download firmware .bin file by ID. Used by ESP32 during OTA. Returns binary with X-Checksum-SHA256 and X-Firmware-Version headers."
+          }
+        },
+        {
+          "name": "Trigger OTA Rollout",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "x-csrf-token",
+                "value": "{{csrf_token}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"firmware_id\": 1,\n  \"device_ids\": [1, 2, 3]\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/firmware/rollout",
+              "host": ["{{base_url}}"],
+              "path": ["firmware", "rollout"]
+            },
+            "description": "Trigger OTA rollout to selected devices via MQTT. ADMIN+ only. Pass empty device_ids array to target all active devices."
+          }
+        },
+        {
+          "name": "Get OTA Status",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "x-csrf-token",
+                "value": "{{csrf_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/firmware/status",
+              "host": ["{{base_url}}"],
+              "path": ["firmware", "status"]
+            },
+            "description": "Get OTA update status for all active devices."
+          }
+        },
+        {
+          "name": "Upload Firmware File (DB storage)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "x-csrf-token",
+                "value": "{{csrf_token}}"
+              }
+            ],
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                {
+                  "key": "file",
+                  "type": "file",
+                  "description": "Firmware .bin file"
+                },
+                {
+                  "key": "version",
+                  "value": "1.2.0-webserial",
+                  "type": "text"
+                },
+                {
+                  "key": "board_type",
+                  "value": "ESP32",
+                  "type": "text"
+                },
+                {
+                  "key": "notes",
+                  "value": "Web Serial flashing build with improved boot sequence",
+                  "type": "text"
+                }
+              ]
+            },
+            "url": {
+              "raw": "{{base_url}}/firmware/files/upload",
+              "host": ["{{base_url}}"],
+              "path": ["firmware", "files", "upload"]
+            },
+            "description": "Upload a .bin firmware file and store binary in the database. ADMIN+ only. For Web Serial and device use."
+          }
+        },
+        {
+          "name": "Get Latest Firmware File Metadata",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/firmware/files/latest",
+              "host": ["{{base_url}}"],
+              "path": ["firmware", "files", "latest"]
+            },
+            "description": "Get latest active firmware file metadata (no auth required). Used by devices and Web Serial."
+          }
+        },
+        {
+          "name": "Download Latest Firmware Binary",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/firmware/files/latest/bin",
+              "host": ["{{base_url}}"],
+              "path": ["firmware", "files", "latest", "bin"]
+            },
+            "description": "Download latest active firmware .bin binary (no auth). Returns binary with checksum headers."
+          }
+        },
+        {
+          "name": "List Firmware File Versions",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "x-csrf-token",
+                "value": "{{csrf_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/firmware/files/versions",
+              "host": ["{{base_url}}"],
+              "path": ["firmware", "files", "versions"]
+            },
+            "description": "List all firmware file versions with metadata. Requires auth."
+          }
+        },
+        {
+          "name": "Download Firmware File by Version",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/firmware/files/1.2.0-webserial/bin",
+              "host": ["{{base_url}}"],
+              "path": ["firmware", "files", "1.2.0-webserial", "bin"]
+            },
+            "description": "Download a specific firmware version .bin (no auth). Used by devices."
+          }
+        },
+        {
+          "name": "Delete Firmware File Version",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "x-csrf-token",
+                "value": "{{csrf_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/firmware/files/1.2.0-webserial",
+              "host": ["{{base_url}}"],
+              "path": ["firmware", "files", "1.2.0-webserial"]
+            },
+            "description": "Deactivate a firmware file version. ADMIN+ only."
+          }
+        }
+      ]
+    },
+    {
+      "name": "Historical Readings",
+      "description": "Query historical sensor readings and export data as CSV.",
+      "item": [
+        {
+          "name": "Get Room Readings",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "x-csrf-token",
+                "value": "{{csrf_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/readings/room/1?from=2026-03-01T00:00:00Z&to=2026-03-12T23:59:59Z&limit=200",
+              "host": ["{{base_url}}"],
+              "path": ["readings", "room", "1"],
+              "query": [
+                {
+                  "key": "from",
+                  "value": "2026-03-01T00:00:00Z",
+                  "description": "Start datetime filter"
+                },
+                {
+                  "key": "to",
+                  "value": "2026-03-12T23:59:59Z",
+                  "description": "End datetime filter"
+                },
+                {
+                  "key": "limit",
+                  "value": "200",
+                  "description": "Max results (1-1000, default 100)"
+                }
+              ]
+            },
+            "description": "Get historical sensor readings for a room. Supports datetime range filtering and pagination."
+          }
+        },
+        {
+          "name": "Get Device Readings",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "x-csrf-token",
+                "value": "{{csrf_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/readings/device/1?from=2026-03-10T00:00:00Z&to=2026-03-12T23:59:59Z&limit=100",
+              "host": ["{{base_url}}"],
+              "path": ["readings", "device", "1"],
+              "query": [
+                {
+                  "key": "from",
+                  "value": "2026-03-10T00:00:00Z"
+                },
+                {
+                  "key": "to",
+                  "value": "2026-03-12T23:59:59Z"
+                },
+                {
+                  "key": "limit",
+                  "value": "100"
+                }
+              ]
+            },
+            "description": "Get historical sensor readings for a specific device."
+          }
+        },
+        {
+          "name": "Export Readings as CSV",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "x-csrf-token",
+                "value": "{{csrf_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/readings/export?room_id=1&from=2026-03-01&to=2026-03-12",
+              "host": ["{{base_url}}"],
+              "path": ["readings", "export"],
+              "query": [
+                {
+                  "key": "room_id",
+                  "value": "1",
+                  "description": "Room ID to export"
+                },
+                {
+                  "key": "from",
+                  "value": "2026-03-01",
+                  "description": "Start date (YYYY-MM-DD)"
+                },
+                {
+                  "key": "to",
+                  "value": "2026-03-12",
+                  "description": "End date (YYYY-MM-DD)"
+                }
+              ]
+            },
+            "description": "Export room readings as a CSV file download. Streams up to 50,000 rows with columns: timestamp, co2_ppm, room_temp, room_humidity, outdoor_temp, outdoor_humidity, bag_temp_1..10."
+          }
+        }
+      ]
+    },
+    {
+      "name": "Reports",
+      "description": "Generate and download CSV reports for plants.",
+      "item": [
+        {
+          "name": "List Reports",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "x-csrf-token",
+                "value": "{{csrf_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/reports/",
+              "host": ["{{base_url}}"],
+              "path": ["reports", ""]
+            },
+            "description": "List all reports for the current user's organization."
+          }
+        },
+        {
+          "name": "Get Report by ID",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "x-csrf-token",
+                "value": "{{csrf_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/reports/1",
+              "host": ["{{base_url}}"],
+              "path": ["reports", "1"]
+            },
+            "description": "Get a specific report by ID."
+          }
+        },
+        {
+          "name": "Generate Report",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "x-csrf-token",
+                "value": "{{csrf_token}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"plant_id\": 1,\n  \"report_type\": \"MONTHLY\",\n  \"report_name\": \"March 2026 Sensor Data Report - Kimandi Farm\",\n  \"format\": \"CSV\",\n  \"date_from\": \"2026-03-01\",\n  \"date_to\": \"2026-03-31\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/reports/generate",
+              "host": ["{{base_url}}"],
+              "path": ["reports", "generate"]
+            },
+            "description": "Generate a CSV report for a plant. MANAGER+ only. Report types: DAILY, WEEKLY, MONTHLY, CUSTOM. Formats: PDF, EXCEL, CSV (only CSV currently generated)."
+          }
+        },
+        {
+          "name": "Download Report",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "x-csrf-token",
+                "value": "{{csrf_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/reports/1/download",
+              "host": ["{{base_url}}"],
+              "path": ["reports", "1", "download"]
+            },
+            "description": "Download a generated report file."
+          }
+        },
+        {
+          "name": "Delete Report",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "x-csrf-token",
+                "value": "{{csrf_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/reports/1",
+              "host": ["{{base_url}}"],
+              "path": ["reports", "1"]
+            },
+            "description": "Delete a report and its file from disk. ADMIN+ only."
+          }
+        }
+      ]
+    },
+    {
+      "name": "Climate Advisory",
+      "description": "Climate guidelines and real-time advisory system. Provides recommended thresholds per mushroom species and growth stage.",
+      "item": [
+        {
+          "name": "Get Room Advisory",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "x-csrf-token",
+                "value": "{{csrf_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/advisory/room/1",
+              "host": ["{{base_url}}"],
+              "path": ["advisory", "room", "1"]
+            },
+            "description": "Get climate advisory for a room based on its current growth stage. Returns recommended thresholds, current deviations, stage duration info, transition reminders, and suggestions."
+          }
+        },
+        {
+          "name": "List All Climate Guidelines",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "x-csrf-token",
+                "value": "{{csrf_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/advisory/guidelines",
+              "host": ["{{base_url}}"],
+              "path": ["advisory", "guidelines"]
+            },
+            "description": "List all climate guidelines. Returns recommended temp, humidity, CO2 ranges for each plant type and growth stage."
+          }
+        },
+        {
+          "name": "Get Specific Guideline",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "x-csrf-token",
+                "value": "{{csrf_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/advisory/guidelines/OYSTER/FRUITING",
+              "host": ["{{base_url}}"],
+              "path": ["advisory", "guidelines", "OYSTER", "FRUITING"]
+            },
+            "description": "Get a specific climate guideline by plant type (OYSTER/BUTTON/SHIITAKE/MIXED) and growth stage (INOCULATION/SPAWN_RUN/INCUBATION/FRUITING/HARVEST/IDLE)."
+          }
+        },
+        {
+          "name": "Update Guideline",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "x-csrf-token",
+                "value": "{{csrf_token}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"temp_min\": 15,\n  \"temp_max\": 20,\n  \"humidity_min\": 85,\n  \"humidity_max\": 95,\n  \"co2_min\": 400,\n  \"co2_max\": 800,\n  \"temp_hysteresis\": 1.0,\n  \"humidity_hysteresis\": 3.0,\n  \"co2_hysteresis\": 50,\n  \"duration_days_min\": 5,\n  \"duration_days_max\": 10,\n  \"notes\": \"Oyster fruiting: maintain high humidity, low CO2 for primordia initiation.\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/advisory/guidelines/OYSTER/FRUITING",
+              "host": ["{{base_url}}"],
+              "path": ["advisory", "guidelines", "OYSTER", "FRUITING"]
+            },
+            "description": "Update a climate guideline. ADMIN+ only. Partial update supported."
+          }
+        },
+        {
+          "name": "Apply Recommended Thresholds to Room",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "x-csrf-token",
+                "value": "{{csrf_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/advisory/room/1/apply",
+              "host": ["{{base_url}}"],
+              "path": ["advisory", "room", "1", "apply"]
+            },
+            "description": "Apply the recommended guideline thresholds to a room based on its current growth stage and plant type. Publishes updated config to devices via MQTT. ADMIN/MANAGER."
+          }
+        }
+      ]
+    },
+    {
+      "name": "Health",
+      "description": "Health check and monitoring endpoints for platform observability.",
+      "item": [
+        {
+          "name": "Basic Health Check",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/../health",
+              "host": ["{{base_url}}"],
+              "path": ["..", "health"]
+            },
+            "description": "Basic health check for Railway health probes (no auth). Returns healthy/degraded/unhealthy based on DB, Redis, and MQTT status. Note: This endpoint is at /health, outside the /api/v1 prefix."
+          }
+        },
+        {
+          "name": "Detailed Health Check",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "x-csrf-token",
+                "value": "{{csrf_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/../health/detailed",
+              "host": ["{{base_url}}"],
+              "path": ["..", "health", "detailed"]
+            },
+            "description": "Detailed health check with service latencies, device counts, uptime, and Python version. Requires authentication."
+          }
+        },
+        {
+          "name": "Platform Metrics",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "x-csrf-token",
+                "value": "{{csrf_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/../health/metrics",
+              "host": ["{{base_url}}"],
+              "path": ["..", "health", "metrics"]
+            },
+            "description": "Raw platform metrics from Redis counters: telemetry_messages_total, mqtt_reconnects, relay_acks, per-endpoint API request counts, active_alerts. SUPER_ADMIN only."
+          }
+        }
+      ]
+    },
+    {
+      "name": "Device API (ESP32)",
+      "description": "Endpoints called by ESP32 devices directly. Auth via license_key/mac_address or X-Device-Id/X-Device-Key headers.",
+      "item": [
+        {
+          "name": "Register Device",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"license_key\": \"LIC-ABCD-1234-WXYZ\",\n  \"mac_address\": \"AA:BB:CC:DD:EE:01\",\n  \"firmware_version\": \"1.2.0\",\n  \"hardware_version\": \"rev3\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/device/register",
+              "host": ["{{base_url}}"],
+              "path": ["device", "register"]
+            },
+            "description": "Register or re-register an ESP32 device using license_key + mac_address pair. Device must be pre-provisioned. Rate limited: 5/minute."
+          }
+        },
+        {
+          "name": "Poll Provisioning Status",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "X-Mac-Address",
+                "value": "AA:BB:CC:DD:EE:01",
+                "description": "Optional MAC address verification"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/device/provision/LIC-ABCD-1234-WXYZ",
+              "host": ["{{base_url}}"],
+              "path": ["device", "provision", "LIC-ABCD-1234-WXYZ"]
+            },
+            "description": "ESP32 polls this to check provisioning status and get MQTT credentials. Returns: pending, pending_approval, ready (with MQTT creds), suspended, or expired. Rate limited: 10/minute."
+          }
+        },
+        {
+          "name": "Submit Sensor Reading",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "X-Device-Id",
+                "value": "1"
+              },
+              {
+                "key": "X-Device-Key",
+                "value": "{{device_key}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"co2_ppm\": 850.0,\n  \"room_temp\": 21.5,\n  \"room_humidity\": 88.2,\n  \"bag_temps\": [22.1, 22.3, 21.8, 22.0, 21.9, 22.2, 21.7, 22.4, 21.6, 22.0],\n  \"outdoor_temp\": 18.3,\n  \"outdoor_humidity\": 65.0,\n  \"relay_states\": {\n    \"CO2\": true,\n    \"HUMIDITY\": false,\n    \"TEMPERATURE\": true,\n    \"AHU\": true,\n    \"HUMIDIFIER\": false,\n    \"DUCT_FAN\": true,\n    \"EXTRA\": false\n  }\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/device/readings",
+              "host": ["{{base_url}}"],
+              "path": ["device", "readings"]
+            },
+            "description": "Submit a sensor reading from an ESP32 device. Requires X-Device-Id and X-Device-Key headers. Stores in PostgreSQL + Redis, checks thresholds, pushes WebSocket updates."
+          }
+        },
+        {
+          "name": "Device Heartbeat",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "X-Device-Id",
+                "value": "1"
+              },
+              {
+                "key": "X-Device-Key",
+                "value": "{{device_key}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"device_ip\": \"192.168.1.42\",\n  \"wifi_rssi\": -52,\n  \"free_heap\": 187432,\n  \"uptime_seconds\": 86400\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/device/heartbeat",
+              "host": ["{{base_url}}"],
+              "path": ["device", "heartbeat"]
+            },
+            "description": "Health check / heartbeat from ESP32 device. Updates device_ip, wifi_rssi, free_heap, and confirms device is online."
+          }
+        },
+        {
+          "name": "Poll Device Commands",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "X-Device-Id",
+                "value": "1"
+              },
+              {
+                "key": "X-Device-Key",
+                "value": "{{device_key}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/device/1/commands",
+              "host": ["{{base_url}}"],
+              "path": ["device", "1", "commands"]
+            },
+            "description": "Poll for pending relay commands for a device. Commands are one-time: the Redis key is deleted after reading. Requires device auth headers."
+          }
+        }
+      ]
+    },
+    {
+      "name": "Inquiries",
+      "description": "Contact form submissions from the marketing site. Public endpoint for submissions, admin-only listing.",
+      "item": [
+        {
+          "name": "Submit Contact Inquiry",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"inquiry_type\": \"DEMO\",\n  \"name\": \"John Kamau\",\n  \"email\": \"john.kamau@mushfarm.co.ke\",\n  \"phone\": \"+254712345678\",\n  \"farm_size\": \"2000 sqft, 6 rooms\",\n  \"message\": \"Interested in the IoT monitoring system for our oyster mushroom farm in Kiambu. Currently running 6 fruiting rooms with manual monitoring. Would like to schedule a demo to see the real-time dashboard and automated climate control features.\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/inquiries/",
+              "host": ["{{base_url}}"],
+              "path": ["inquiries", ""]
+            },
+            "description": "Submit a contact or demo inquiry (public, no auth required). Inquiry types: GENERAL, DEMO, SUPPORT, PARTNERSHIP. Rate limited: 5/minute."
+          }
+        },
+        {
+          "name": "List Inquiries (Admin)",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "x-csrf-token",
+                "value": "{{csrf_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/inquiries/?limit=50&offset=0",
+              "host": ["{{base_url}}"],
+              "path": ["inquiries", ""],
+              "query": [
+                {
+                  "key": "limit",
+                  "value": "50"
+                },
+                {
+                  "key": "offset",
+                  "value": "0"
+                }
+              ]
+            },
+            "description": "List all contact inquiries, newest first. ADMIN+ only."
+          }
+        }
+      ]
+    }
+  ]
+}
