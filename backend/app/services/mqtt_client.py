@@ -52,12 +52,16 @@ class MQTTManager:
                     logger.warning(
                         "MQTT disconnected: %s. Reconnecting in 5s...", e
                     )
+                    from app.middleware.metrics import record_metric
+                    await record_metric("mqtt_reconnects", 1)
                     await asyncio.sleep(5)
             except Exception as e:
                 if self._running:
                     logger.error(
                         "MQTT error: %s. Reconnecting in 5s...", e
                     )
+                    from app.middleware.metrics import record_metric
+                    await record_metric("mqtt_reconnects", 1)
                     await asyncio.sleep(5)
 
     async def stop(self):
@@ -99,7 +103,10 @@ class MQTTManager:
         from app.models.device import Device
         from app.services.reading_service import process_reading
         from app.services.ws_manager import ws_manager
+        from app.middleware.metrics import record_metric
         from sqlalchemy import select
+
+        await record_metric("telemetry_messages", 1)
 
         try:
             async with async_session_factory() as db:
@@ -177,7 +184,10 @@ class MQTTManager:
         from app.models.plant import Plant
         from app.models.room import Room
         from app.services.ws_manager import ws_manager
+        from app.middleware.metrics import record_metric
         from sqlalchemy import select
+
+        await record_metric("relay_acks", 1)
 
         relay_type = data.get("relay_type", "")
         state = data.get("state", "")

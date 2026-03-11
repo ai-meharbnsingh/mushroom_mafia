@@ -1,10 +1,16 @@
 import asyncio
 import logging
 from contextlib import asynccontextmanager
+from datetime import datetime, timezone
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi_limiter import FastAPILimiter
+
+from app.logging_config import setup_logging, RequestIdMiddleware
+
+# Configure logging before anything else
+setup_logging()
 
 from app.config import settings
 from app.redis_client import init_redis, close_redis
@@ -17,6 +23,9 @@ logger = logging.getLogger(__name__)
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    # Store startup timestamp
+    app.state.startup_time = datetime.now(timezone.utc)
+
     # Production guard: refuse to start with default secrets
     if settings.is_production:
         if settings.JWT_SECRET.startswith("change-me"):
@@ -68,6 +77,11 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
+# Middleware ordering: outermost first
+# 1. Request ID (outermost — every request gets an ID)
+app.add_middleware(RequestIdMiddleware)
+
+# 2. CORS
 app.add_middleware(
     CORSMiddleware,
     allow_origins=settings.cors_origins_list,
@@ -76,12 +90,17 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+# 3. Metrics middleware (fire-and-forget, safe even if Redis is down)
+from app.middleware.metrics import MetricsMiddleware
 
-@app.get("/health")
-async def health_check():
-    return {"status": "healthy"}
+app.add_middleware(MetricsMiddleware)
 
+# Health router (mounted at root, not under /api/v1)
+from app.api.health import router as health_router
 
+app.include_router(health_router)
+
+# API router
 from app.api.router import api_router
 
 app.include_router(api_router, prefix="/api/v1")
