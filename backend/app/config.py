@@ -42,6 +42,11 @@ class Settings(BaseSettings):
         return self.is_production
 
     @property
+    def cookie_samesite(self) -> str:
+        """SameSite cookie policy. 'none' in production (cross-origin: Vercel→Railway), 'lax' in dev."""
+        return "none" if self.is_production else "lax"
+
+    @property
     def cors_origins_list(self) -> list[str]:
         return [origin.strip() for origin in self.CORS_ORIGINS.split(",")]
 
