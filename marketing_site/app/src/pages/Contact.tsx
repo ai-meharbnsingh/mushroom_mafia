@@ -68,12 +68,6 @@ export default function Contact() {
     setIsSubmitting(true);
     setError('');
 
-    const payload = {
-      ...formData,
-      inquiry_type: config.inquiryType,
-      farm_size: formData.farmSize,
-    };
-
     try {
       // Send email via Vercel serverless function
       const emailPromise = fetch('/api/contact', {
