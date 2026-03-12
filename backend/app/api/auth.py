@@ -4,7 +4,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 
 from app.config import settings
-from fastapi_limiter.depends import RateLimiter
+from app.api.deps import safe_rate_limit
 from app.database import get_db
 from app.schemas.auth import (
     LoginRequest,
@@ -21,7 +21,7 @@ from app.utils.security import decode_token, hash_password, verify_password
 router = APIRouter()
 
 
-@router.post("/login", response_model=TokenResponse, dependencies=[Depends(RateLimiter(times=5, seconds=60))])
+@router.post("/login", response_model=TokenResponse, dependencies=[Depends(safe_rate_limit(times=5, seconds=60))])
 async def login(request: LoginRequest, response: Response, db: AsyncSession = Depends(get_db)):
     """Authenticate user and return access + refresh tokens."""
     user = await authenticate_user(db, request.username, request.password)

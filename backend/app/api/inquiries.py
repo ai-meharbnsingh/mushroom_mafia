@@ -2,7 +2,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 
-from fastapi_limiter.depends import RateLimiter
+from app.api.deps import safe_rate_limit
 from app.database import get_db
 from app.models.inquiry import ContactInquiry, InquiryType
 from app.models.user import User
@@ -17,7 +17,7 @@ router = APIRouter()
     "/",
     response_model=InquiryResponse,
     status_code=status.HTTP_201_CREATED,
-    dependencies=[Depends(RateLimiter(times=5, seconds=60))],
+    dependencies=[Depends(safe_rate_limit(times=5, seconds=60))],
 )
 async def create_inquiry(
     body: InquiryCreate,

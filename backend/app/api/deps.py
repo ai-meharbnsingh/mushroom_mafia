@@ -1,3 +1,5 @@
+import logging
+
 from fastapi import Depends, Header, HTTPException, status, Request
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -9,7 +11,21 @@ from app.models.device import Device
 from app.models.enums import SubscriptionStatus
 from app.utils.security import decode_token
 
+logger = logging.getLogger(__name__)
 security = HTTPBearer(auto_error=False)
+
+
+def safe_rate_limit(times: int = 5, seconds: int = 60):
+    """Rate limiter that gracefully skips when Redis is unavailable."""
+    async def _dependency(request: Request):
+        try:
+            from fastapi_limiter.depends import RateLimiter
+            limiter = RateLimiter(times=times, seconds=seconds)
+            await limiter(request)
+        except Exception:
+            # Redis unavailable — skip rate limiting rather than blocking requests
+            pass
+    return _dependency
 
 
 async def get_current_user(
