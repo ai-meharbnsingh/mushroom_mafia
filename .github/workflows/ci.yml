@@ -45,7 +45,7 @@ jobs:
 
       # Cache pip packages to speed up subsequent runs
       - name: Cache pip dependencies
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         with:
           path: ~/.cache/pip
           key: pip-backend-${{ runner.os }}-${{ hashFiles('backend/requirements.txt') }}
@@ -91,7 +91,7 @@ jobs:
 
       # Cache npm packages using package-lock.json hash
       - name: Cache npm dependencies
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         with:
           path: ~/.npm
           key: npm-frontend-${{ runner.os }}-${{ hashFiles('frontend/package-lock.json') }}
@@ -128,7 +128,7 @@ jobs:
 
       # Cache PlatformIO core, packages, and toolchains
       - name: Cache PlatformIO
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         with:
           path: ~/.platformio
           key: pio-${{ runner.os }}-${{ hashFiles('Firmware/platformio.ini') }}
@@ -190,7 +190,7 @@ jobs:
           python-version: "3.11"
 
       - name: Cache pip dependencies
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         with:
           path: ~/.cache/pip
           key: pip-backend-${{ runner.os }}-${{ hashFiles('backend/requirements.txt') }}
@@ -210,7 +210,7 @@ jobs:
           node-version: "20"
 
       - name: Cache npm dependencies
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         with:
           path: ~/.npm
           key: npm-frontend-${{ runner.os }}-${{ hashFiles('frontend/package-lock.json') }}
@@ -265,7 +265,7 @@ jobs:
 
       # Always upload the Playwright HTML report, even if tests fail
       - name: Upload Playwright report
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         if: always()
         with:
           name: playwright-report
