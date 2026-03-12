@@ -8,6 +8,7 @@ from redis.asyncio import Redis
 
 from app.models.relay_config import RelayConfig
 from app.models.threshold import Threshold
+from app.utils.time import utcnow_naive
 from app.models.relay_status import RelayStatus
 from app.models.device import Device
 from app.models.room import Room
@@ -158,7 +159,7 @@ async def evaluate_auto_relays(
     for t in thresholds:
         threshold_map[t.parameter.value] = t
 
-    now = datetime.now(timezone.utc)
+    now = utcnow_naive()
 
     for config in auto_configs:
         if not config.threshold_param:

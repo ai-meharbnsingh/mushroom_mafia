@@ -7,6 +7,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func as sa_func
 
 from app.database import get_db
+from app.utils.time import utcnow_naive
 from app.models.harvest import Harvest
 from app.models.room import Room
 from app.models.plant import Plant
@@ -68,7 +69,7 @@ async def create_harvest(
 
     harvest = Harvest(
         room_id=body.room_id,
-        harvested_at=body.harvested_at or datetime.now(timezone.utc),
+        harvested_at=body.harvested_at or utcnow_naive(),
         weight_kg=body.weight_kg,
         grade=grade,
         notes=body.notes,
@@ -121,7 +122,7 @@ async def get_harvest_summary(
     if not room_ids:
         return []
 
-    cutoff = datetime.now(timezone.utc) - timedelta(days=months * 30)
+    cutoff = utcnow_naive() - timedelta(days=months * 30)
 
     return await _build_summary(db, room_ids, cutoff, period)
 
@@ -137,7 +138,7 @@ async def get_room_harvest_summary(
     """Get yield summary for a specific room, grouped by period."""
     await _verify_room_ownership(db, room_id, current_user.owner_id)
 
-    cutoff = datetime.now(timezone.utc) - timedelta(days=months * 30)
+    cutoff = utcnow_naive() - timedelta(days=months * 30)
 
     return await _build_summary(db, [room_id], cutoff, period)
 

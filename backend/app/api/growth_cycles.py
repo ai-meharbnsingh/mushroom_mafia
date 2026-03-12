@@ -7,6 +7,7 @@ from sqlalchemy import select
 import logging
 
 from app.database import get_db
+from app.utils.time import utcnow_naive
 from app.models.growth_cycle import GrowthCycle
 from app.models.room import Room
 from app.models.plant import Plant
@@ -90,11 +91,11 @@ async def create_growth_cycle(
     )
     for active_cycle in active_result.scalars().all():
         active_cycle.is_active = False
-        active_cycle.updated_at = datetime.now(timezone.utc)
+        active_cycle.updated_at = utcnow_naive()
 
     cycle = GrowthCycle(
         room_id=body.room_id,
-        started_at=body.started_at or datetime.now(timezone.utc),
+        started_at=body.started_at or utcnow_naive(),
         current_stage=stage,
         expected_harvest_date=body.expected_harvest_date,
         target_yield_kg=body.target_yield_kg,
@@ -144,7 +145,7 @@ async def advance_growth_stage(
             detail="Cannot advance an inactive cycle",
         )
 
-    now = datetime.now(timezone.utc)
+    now = utcnow_naive()
 
     if body and body.current_stage:
         # Jump to specified stage

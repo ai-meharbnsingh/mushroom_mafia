@@ -7,6 +7,7 @@ from datetime import datetime, timezone, timedelta
 from sqlalchemy import select, and_
 
 from app.database import async_session_factory
+from app.utils.time import utcnow_naive
 from app.models.device import Device
 from app.models.alert import Alert
 from app.models.enums import AlertType, Severity
@@ -32,7 +33,7 @@ async def check_device_health() -> dict:
 
     Returns a summary dict with counts of checked/transitioned devices.
     """
-    now = datetime.now(timezone.utc)
+    now = utcnow_naive()
     cutoff = now - OFFLINE_THRESHOLD
 
     transitioned = 0

@@ -8,6 +8,7 @@ from redis.asyncio import Redis
 
 from app.database import get_db
 from app.redis_client import get_redis
+from app.utils.time import utcnow_naive
 from app.models.user import User
 from app.models.plant import Plant
 from app.models.room import Room
@@ -283,7 +284,7 @@ async def get_admin_dashboard(
     )
 
     # --- Alert summary ---
-    today_start = datetime.now(timezone.utc).replace(
+    today_start = utcnow_naive().replace(
         hour=0, minute=0, second=0, microsecond=0
     )
 

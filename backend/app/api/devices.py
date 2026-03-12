@@ -5,6 +5,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, or_
 
 from app.database import get_db
+from app.utils.time import utcnow_naive
 from app.models.device import Device
 from app.models.room import Room
 from app.models.plant import Plant
@@ -421,7 +422,7 @@ async def link_device(
     device.subscription_status = SubscriptionStatus.PENDING_APPROVAL
     device.room_id = link_in.room_id
     device.linked_by_user_id = current_user.user_id
-    device.linked_at = datetime.now(timezone.utc)
+    device.linked_at = utcnow_naive()
 
     await db.commit()
     await db.refresh(device)

@@ -6,6 +6,7 @@ from datetime import datetime, timezone
 import aiomqtt
 
 from app.config import settings
+from app.utils.time import utcnow_naive
 
 logger = logging.getLogger(__name__)
 
@@ -120,7 +121,7 @@ class MQTTManager:
 
                 # Update device status
                 device.is_online = True
-                device.last_seen = datetime.now(timezone.utc)
+                device.last_seen = utcnow_naive()
                 if "wifi_rssi" in data:
                     device.wifi_rssi = data["wifi_rssi"]
                 if "free_heap" in data:
