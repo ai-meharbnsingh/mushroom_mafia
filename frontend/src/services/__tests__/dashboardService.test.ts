@@ -1,5 +1,6 @@
 import { dashboardService } from '../dashboardService';
 import api from '../api';
+import type { Mock } from 'vitest';
 
 // Mock the api module
 vi.mock('../api', () => ({
@@ -11,7 +12,7 @@ vi.mock('../api', () => ({
   },
 }));
 
-const mockedApi = vi.mocked(api);
+const mockedGet = api.get as Mock;
 
 describe('dashboardService', () => {
   beforeEach(() => {
@@ -26,18 +27,18 @@ describe('dashboardService', () => {
         activeDevices: 8,
         activeAlerts: 2,
       };
-      mockedApi.get.mockResolvedValueOnce({ data: mockData });
+      mockedGet.mockResolvedValueOnce({ data: mockData });
 
       const result = await dashboardService.getSummary();
 
-      expect(mockedApi.get).toHaveBeenCalledWith('/dashboard/summary');
-      expect(mockedApi.get).toHaveBeenCalledTimes(1);
+      expect(mockedGet).toHaveBeenCalledWith('/dashboard/summary');
+      expect(mockedGet).toHaveBeenCalledTimes(1);
       expect(result).toEqual(mockData);
     });
 
     it('propagates errors from the API', async () => {
       const error = new Error('Network Error');
-      mockedApi.get.mockRejectedValueOnce(error);
+      mockedGet.mockRejectedValueOnce(error);
 
       await expect(dashboardService.getSummary()).rejects.toThrow('Network Error');
     });
@@ -49,11 +50,11 @@ describe('dashboardService', () => {
         { roomId: '1', co2: 800, temperature: 22, humidity: 85 },
         { roomId: '2', co2: 600, temperature: 24, humidity: 90 },
       ];
-      mockedApi.get.mockResolvedValueOnce({ data: mockReadings });
+      mockedGet.mockResolvedValueOnce({ data: mockReadings });
 
       const result = await dashboardService.getCurrentReadings();
 
-      expect(mockedApi.get).toHaveBeenCalledWith('/dashboard/current-readings');
+      expect(mockedGet).toHaveBeenCalledWith('/dashboard/current-readings');
       expect(result).toEqual(mockReadings);
     });
   });
@@ -72,11 +73,11 @@ describe('dashboardService', () => {
         plants: [],
         recentEvents: [],
       };
-      mockedApi.get.mockResolvedValueOnce({ data: mockAdminData });
+      mockedGet.mockResolvedValueOnce({ data: mockAdminData });
 
       const result = await dashboardService.getAdminSummary();
 
-      expect(mockedApi.get).toHaveBeenCalledWith('/dashboard/admin-summary');
+      expect(mockedGet).toHaveBeenCalledWith('/dashboard/admin-summary');
       expect(result).toEqual(mockAdminData);
     });
   });
@@ -95,26 +96,26 @@ describe('dashboardService', () => {
         criticalAlerts: 0,
         rooms: [],
       };
-      mockedApi.get.mockResolvedValueOnce({ data: mockPlantDash });
+      mockedGet.mockResolvedValueOnce({ data: mockPlantDash });
 
       const result = await dashboardService.getPlantDashboard(42);
 
-      expect(mockedApi.get).toHaveBeenCalledWith('/dashboard/plant/42');
+      expect(mockedGet).toHaveBeenCalledWith('/dashboard/plant/42');
       expect(result).toEqual(mockPlantDash);
     });
 
     it('handles different plant IDs correctly', async () => {
-      mockedApi.get.mockResolvedValueOnce({ data: { plantId: '1' } });
+      mockedGet.mockResolvedValueOnce({ data: { plantId: '1' } });
       await dashboardService.getPlantDashboard(1);
-      expect(mockedApi.get).toHaveBeenCalledWith('/dashboard/plant/1');
+      expect(mockedGet).toHaveBeenCalledWith('/dashboard/plant/1');
 
-      mockedApi.get.mockResolvedValueOnce({ data: { plantId: '999' } });
+      mockedGet.mockResolvedValueOnce({ data: { plantId: '999' } });
       await dashboardService.getPlantDashboard(999);
-      expect(mockedApi.get).toHaveBeenCalledWith('/dashboard/plant/999');
+      expect(mockedGet).toHaveBeenCalledWith('/dashboard/plant/999');
     });
 
     it('propagates API errors for plant dashboard', async () => {
-      mockedApi.get.mockRejectedValueOnce({
+      mockedGet.mockRejectedValueOnce({
         response: { status: 404, data: { detail: 'Plant not found' } },
       });
 
