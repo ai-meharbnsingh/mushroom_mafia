@@ -3,7 +3,6 @@ import userEvent from '@testing-library/user-event';
 import { MemoryRouter } from 'react-router-dom';
 import { Plants } from '../Plants';
 import { AppProvider } from '@/store/AppContext';
-import type { Plant } from '@/types';
 
 // Mock gsap — it's not needed in tests and doesn't work in jsdom
 vi.mock('gsap', () => ({

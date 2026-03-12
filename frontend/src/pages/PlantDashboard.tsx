@@ -13,7 +13,7 @@ import { TypeBadge } from '@/components/ui-custom/TypeBadge';
 import { useApp } from '@/store/AppContext';
 import { dashboardService } from '@/services/dashboardService';
 import { mapPlantDashboardSummary } from '@/utils/mappers';
-import type { PlantDashboardSummary } from '@/types';
+import type { PlantDashboardSummary, PlantType, RoomType } from '@/types';
 
 export const PlantDashboard: React.FC = () => {
   const { plantId } = useParams<{ plantId: string }>();
@@ -116,7 +116,7 @@ export const PlantDashboard: React.FC = () => {
             <h1 className="text-2xl font-bold text-iot-primary">{data.plantName}</h1>
             <div className="flex items-center gap-3 mt-1">
               <span className="font-mono text-sm text-iot-secondary">{data.plantCode}</span>
-              <TypeBadge type={data.plantType} variant="plant" />
+              <TypeBadge type={data.plantType as PlantType} variant="plant" />
               {(data.city || data.state) && (
                 <span className="flex items-center gap-1 text-sm text-iot-muted">
                   <MapPin className="w-3 h-3" />
@@ -175,7 +175,7 @@ export const PlantDashboard: React.FC = () => {
                     <td className="font-medium">{room.roomName}</td>
                     <td className="font-mono text-iot-secondary">{room.roomCode}</td>
                     <td>
-                      <TypeBadge type={room.roomType} variant="room" />
+                      <TypeBadge type={room.roomType as RoomType} variant="room" />
                     </td>
                     <td>
                       <StatusBadge status={roomStatusColor(room.status)} />
