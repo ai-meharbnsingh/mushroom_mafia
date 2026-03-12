@@ -3,7 +3,7 @@ from datetime import datetime, timedelta, timezone
 
 def _utcnow_naive() -> datetime:
     """Return current UTC time as a naive datetime (for TIMESTAMP WITHOUT TIME ZONE columns)."""
-    return _utcnow_naive().replace(tzinfo=None)
+    return datetime.now(timezone.utc).replace(tzinfo=None)
 
 from fastapi import HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
