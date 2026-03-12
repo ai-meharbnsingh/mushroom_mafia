@@ -1,5 +1,10 @@
 from datetime import datetime, timedelta, timezone
 
+
+def _utcnow_naive() -> datetime:
+    """Return current UTC time as a naive datetime (for TIMESTAMP WITHOUT TIME ZONE columns)."""
+    return _utcnow_naive().replace(tzinfo=None)
+
 from fastapi import HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
@@ -29,8 +34,8 @@ async def authenticate_user(
 
     # Check lockout — auto-unlock if the lockout period has expired
     if user.locked_until:
-        if user.locked_until > datetime.now(timezone.utc):
-            remaining = int((user.locked_until - datetime.now(timezone.utc)).total_seconds() / 60) + 1
+        if user.locked_until > _utcnow_naive():
+            remaining = int((user.locked_until - _utcnow_naive()).total_seconds() / 60) + 1
             raise HTTPException(
                 status_code=status.HTTP_429_TOO_MANY_REQUESTS,
                 detail=f"Account temporarily locked due to too many failed attempts. Try again in {remaining} minute(s).",
@@ -44,7 +49,7 @@ async def authenticate_user(
     if not verify_password(password, user.password_hash):
         user.login_attempts = (user.login_attempts or 0) + 1
         if user.login_attempts >= settings.MAX_LOGIN_ATTEMPTS:
-            user.locked_until = datetime.now(timezone.utc) + timedelta(
+            user.locked_until = _utcnow_naive() + timedelta(
                 minutes=settings.LOCKOUT_DURATION_MINUTES
             )
         await db.commit()
@@ -53,7 +58,7 @@ async def authenticate_user(
     # Reset login attempts on success
     user.login_attempts = 0
     user.locked_until = None
-    user.last_login = datetime.now(timezone.utc)
+    user.last_login = _utcnow_naive()
     await db.commit()
     return user
 
