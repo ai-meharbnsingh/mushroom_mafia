@@ -20,6 +20,7 @@ interface AppState {
   // Auth
   isAuthenticated: boolean;
   currentUser: User | null;
+  accessToken: string | null;
   loginError: string | null;
   isLocked: boolean;
   lockoutTime: number;
@@ -51,6 +52,7 @@ interface AppState {
 const initialState: AppState = {
   isAuthenticated: false,
   currentUser: null,
+  accessToken: null,
   loginError: null,
   isLocked: false,
   lockoutTime: 0,
@@ -81,7 +83,7 @@ const initialState: AppState = {
 
 // Action Types
 type Action =
-  | { type: 'LOGIN_SUCCESS'; payload: User }
+  | { type: 'LOGIN_SUCCESS'; payload: { user: User; accessToken?: string } }
   | { type: 'LOGIN_ERROR'; payload: string }
   | { type: 'LOGOUT' }
   | { type: 'SET_LOCKED'; payload: { isLocked: boolean; lockoutTime: number } }
@@ -123,7 +125,8 @@ function appReducer(state: AppState, action: Action): AppState {
       return {
         ...state,
         isAuthenticated: true,
-        currentUser: action.payload,
+        currentUser: action.payload.user,
+        accessToken: action.payload.accessToken || state.accessToken,
         loginError: null,
         isLocked: false,
         lockoutTime: 0,
@@ -413,8 +416,8 @@ export function useApp() {
 export function useAppActions() {
   const { dispatch } = useApp();
 
-  const login = useCallback((user: User) => {
-    dispatch({ type: 'LOGIN_SUCCESS', payload: user });
+  const login = useCallback((user: User, accessToken?: string) => {
+    dispatch({ type: 'LOGIN_SUCCESS', payload: { user, accessToken } });
   }, [dispatch]);
 
   const loginError = useCallback((error: string) => {

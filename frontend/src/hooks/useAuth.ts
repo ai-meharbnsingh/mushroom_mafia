@@ -22,7 +22,7 @@ export function useAuth() {
         ...data.user,
         id: data.user.user_id?.toString() || data.user.id?.toString(),
       };
-      login(user);
+      login(user, data.access_token);
       setIsLoading(false);
       return true;
     } catch (error: any) {
