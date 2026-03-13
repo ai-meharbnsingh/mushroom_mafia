@@ -8,6 +8,7 @@ from sqlalchemy import select, delete
 from redis.asyncio import Redis
 
 from app.database import get_db
+from app.utils.time import utcnow_naive
 from app.redis_client import get_redis
 from app.models.user import User
 from app.models.device import Device
@@ -178,7 +179,7 @@ async def set_relay_command(
     """
     device = await _verify_device_ownership(db, device_id, current_user.owner_id)
 
-    now = datetime.now(timezone.utc)
+    now = utcnow_naive()
 
     # If device uses MQTT, publish relay command via MQTT instead of Redis polling
     if device.communication_mode.value == "MQTT" if device.communication_mode else False:
@@ -292,7 +293,7 @@ async def update_relay_configs(
     """Upsert relay automation configs for a device."""
     await _verify_device_ownership(db, device_id, current_user.owner_id)
 
-    now = datetime.now(timezone.utc)
+    now = utcnow_naive()
     updated = []
 
     for cfg_in in configs:
@@ -369,7 +370,7 @@ async def set_all_relays_auto(
     """Set all relays to AUTO mode with default parameter mappings."""
     await _verify_device_ownership(db, device_id, current_user.owner_id)
 
-    now = datetime.now(timezone.utc)
+    now = utcnow_naive()
 
     for rt in RelayType:
         default_param = DEFAULT_PARAM_MAPPING.get(rt.value)
@@ -418,7 +419,7 @@ async def set_all_relays_manual(
     """Set all relays to MANUAL mode."""
     await _verify_device_ownership(db, device_id, current_user.owner_id)
 
-    now = datetime.now(timezone.utc)
+    now = utcnow_naive()
 
     for rt in RelayType:
         result = await db.execute(

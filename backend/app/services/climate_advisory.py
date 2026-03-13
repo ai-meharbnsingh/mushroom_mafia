@@ -8,6 +8,7 @@ from datetime import datetime, timezone
 from decimal import Decimal
 
 from sqlalchemy import select
+from app.utils.time import utcnow_naive
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
@@ -197,7 +198,7 @@ async def get_advisory_for_room(
             deviations.append(deviation)
 
     # 6. Compute days_in_stage
-    now = datetime.now(timezone.utc)
+    now = utcnow_naive()
     if cycle.stage_changed_at:
         days_in_stage = (now - cycle.stage_changed_at).days
     else:

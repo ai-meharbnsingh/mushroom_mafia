@@ -24,4 +24,4 @@ class ContactInquiry(Base):
     phone = Column(String(50), nullable=True)
     farm_size = Column(String(50), nullable=True)
     message = Column(Text, nullable=False)
-    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), nullable=False)
+    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc).replace(tzinfo=None), nullable=False)

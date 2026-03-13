@@ -84,7 +84,7 @@ async def test_authenticate_user_auto_unlock_after_lockout_duration(db_session: 
     result = await db_session.execute(select(User).where(User.username == "admin"))
     admin = result.scalar_one()
     admin.login_attempts = settings.MAX_LOGIN_ATTEMPTS
-    admin.locked_until = datetime.now(timezone.utc) - timedelta(minutes=1)
+    admin.locked_until = datetime.now(timezone.utc).replace(tzinfo=None) - timedelta(minutes=1)
     await db_session.commit()
 
     # Should succeed now (lockout expired, attempts reset, then correct password works)

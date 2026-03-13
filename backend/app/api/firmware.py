@@ -13,6 +13,7 @@ from sqlalchemy import select, update, desc
 
 from app.config import settings
 from app.database import get_db
+from app.utils.time import utcnow_naive
 from app.models.device import Device
 from app.models.firmware import Firmware
 from app.models.firmware_file import FirmwareFile
@@ -277,7 +278,7 @@ async def rollout_firmware(
             try:
                 # Update device OTA status
                 device.ota_status = "downloading"
-                device.last_ota_at = datetime.now(timezone.utc)
+                device.last_ota_at = utcnow_naive()
 
                 # Publish OTA command via MQTT
                 if mqtt_manager._client:

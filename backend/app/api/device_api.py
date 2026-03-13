@@ -22,6 +22,7 @@ from app.services.ws_manager import ws_manager
 from app.utils.security import decrypt_device_password
 from app.config import settings
 from app.api.deps import safe_rate_limit
+from app.utils.time import utcnow_naive
 
 # License key format: LIC-XXXX-YYYY-ZZZZ (uppercase alphanumeric groups)
 LICENSE_KEY_PATTERN = re.compile(r'^LIC-[A-Z0-9]{4}-[A-Z0-9]{4}-[A-Z0-9]{4}$')
@@ -58,7 +59,7 @@ async def register_device(
     device.firmware_version = request.firmware_version
     device.hardware_version = request.hardware_version
     device.is_online = True
-    device.last_seen = datetime.now(timezone.utc)
+    device.last_seen = utcnow_naive()
 
     await db.commit()
     await db.refresh(device)
@@ -199,7 +200,7 @@ async def device_heartbeat(
     Updates device fields and confirms the device is online.
     """
     device.is_online = True
-    device.last_seen = datetime.now(timezone.utc)
+    device.last_seen = utcnow_naive()
 
     if "device_ip" in payload:
         device.device_ip = payload["device_ip"]

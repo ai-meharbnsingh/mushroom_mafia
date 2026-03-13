@@ -1,10 +1,11 @@
+import logging
 import secrets
 from fastapi import APIRouter, Depends, HTTPException, status, Response, Request
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 
 from app.config import settings
-from app.api.deps import safe_rate_limit
+from app.api.deps import safe_rate_limit, get_current_user
 from app.database import get_db
 from app.schemas.auth import (
     LoginRequest,
@@ -14,10 +15,10 @@ from app.schemas.auth import (
 )
 from app.schemas.user import UserResponse
 from app.services.auth_service import authenticate_user, create_tokens
-from app.api.deps import get_current_user
 from app.models.user import User
 from app.utils.security import decode_token, hash_password, verify_password
 
+logger = logging.getLogger(__name__)
 router = APIRouter()
 
 

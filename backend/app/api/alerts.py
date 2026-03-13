@@ -6,6 +6,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 
 from app.database import get_db
+from app.utils.time import utcnow_naive
 from app.models.alert import Alert
 from app.models.device import Device
 from app.models.room import Room
@@ -117,7 +118,7 @@ async def acknowledge_alert(
         )
     alert.is_read = True
     alert.acknowledged_by = current_user.user_id
-    alert.acknowledged_at = datetime.now(timezone.utc)
+    alert.acknowledged_at = utcnow_naive()
     await db.commit()
     await db.refresh(alert)
     return alert
@@ -144,7 +145,7 @@ async def resolve_alert(
             status_code=status.HTTP_404_NOT_FOUND, detail="Alert not found"
         )
     alert.is_resolved = True
-    alert.resolved_at = datetime.now(timezone.utc)
+    alert.resolved_at = utcnow_naive()
     await db.commit()
     await db.refresh(alert)
     return alert

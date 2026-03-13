@@ -7,6 +7,7 @@ from redis.asyncio import Redis
 from app.models import RoomReading, Device, Threshold, Alert, RelayStatus, Room, Plant
 from app.models.enums import AlertType, Severity, ThresholdParameter, RelayType, TriggerType
 from app.services.relay_automation import evaluate_auto_relays
+from app.utils.time import utcnow_naive
 
 
 async def process_reading(
@@ -14,7 +15,7 @@ async def process_reading(
 ) -> int:
     """Process a sensor reading: store in Redis + PostgreSQL, check thresholds, push via WebSocket."""
 
-    now = datetime.now(timezone.utc)
+    now = utcnow_naive()
 
     # 1. Build room_reading record
     reading = RoomReading(

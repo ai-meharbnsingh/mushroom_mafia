@@ -22,9 +22,11 @@ def safe_rate_limit(times: int = 5, seconds: int = 60):
             from fastapi_limiter.depends import RateLimiter
             limiter = RateLimiter(times=times, seconds=seconds)
             await limiter(request)
+        except HTTPException:
+            raise  # Re-raise 429 Too Many Requests
         except Exception:
             # Redis unavailable — skip rate limiting rather than blocking requests
-            pass
+            logger.warning("Rate limiter unavailable, allowing request")
     return _dependency
 
 

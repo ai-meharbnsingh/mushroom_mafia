@@ -8,6 +8,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.relay_schedule import RelaySchedule
 from app.models.relay_status import RelayStatus
+from app.utils.time import utcnow_naive
 from app.models.device import Device
 from app.models.room import Room
 from app.models.plant import Plant
@@ -61,7 +62,7 @@ async def _check_schedules(db: AsyncSession):
     if not redis_client:
         return
 
-    now = datetime.now(timezone.utc)
+    now = utcnow_naive()
 
     result = await db.execute(
         select(RelaySchedule).where(RelaySchedule.is_active == True)

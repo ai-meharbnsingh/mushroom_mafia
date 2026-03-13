@@ -1,6 +1,6 @@
 import axios from 'axios';
 
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || '/api/v1';
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || (import.meta.env.DEV ? 'http://localhost:3800/api/v1' : '/api/v1');
 
 const api = axios.create({
   baseURL: API_BASE_URL,
@@ -10,8 +10,16 @@ const api = axios.create({
   headers: { 'Content-Type': 'application/json' },
 });
 
-// Request interceptor
-api.interceptors.request.use((config) => config);
+// Request interceptor: explicitly attach CSRF token from cookie to header
+api.interceptors.request.use((config) => {
+  if (['post', 'put', 'delete', 'patch'].includes(config.method || '')) {
+    const match = document.cookie.match(/(?:^|;\s*)csrf_token=([^;]*)/);
+    if (match) {
+      config.headers['X-CSRF-Token'] = decodeURIComponent(match[1]);
+    }
+  }
+  return config;
+});
 
 // Response interceptor: handle 401, refresh token
 api.interceptors.response.use(
@@ -21,7 +29,7 @@ api.interceptors.response.use(
       if (!error.config._retry && error.config.url !== '/auth/login' && error.config.url !== '/auth/refresh') {
         error.config._retry = true;
         try {
-          await axios.post(`${API_BASE_URL}/auth/refresh`, {}, { withCredentials: true });
+          await api.post('/auth/refresh', {});
           return api(error.config);
         } catch {
           if (window.location.pathname !== '/login') {
