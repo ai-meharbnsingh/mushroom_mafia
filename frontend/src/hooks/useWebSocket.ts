@@ -3,7 +3,11 @@ import { useApp, useAppActions } from '@/store/AppContext';
 import { mapSensorReading } from '@/utils/mappers';
 import type { Alert, RelayType } from '@/types';
 
-const WS_BASE_URL = import.meta.env.VITE_WS_BASE_URL || (import.meta.env.DEV ? 'ws://localhost:3800/api/v1' : `wss://${window.location.host}/api/v1`);
+// In production, ensure ws:// is upgraded to wss://
+let WS_BASE_URL = import.meta.env.VITE_WS_BASE_URL || (import.meta.env.DEV ? 'ws://localhost:3800/api/v1' : `wss://${window.location.host}/api/v1`);
+if (!import.meta.env.DEV && WS_BASE_URL.startsWith('ws://')) {
+  WS_BASE_URL = WS_BASE_URL.replace('ws://', 'wss://');
+}
 const MAX_RECONNECT_ATTEMPTS = 10;
 
 export function useWebSocketSimulation() {
