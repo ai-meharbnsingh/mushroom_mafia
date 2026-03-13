@@ -15,7 +15,7 @@ const api = axios.create({
   headers: { 'Content-Type': 'application/json' },
 });
 
-// Request interceptor: explicitly attach CSRF token from cookie to header
+// Request interceptor: attach CSRF token from cookie to header
 api.interceptors.request.use((config) => {
   if (['post', 'put', 'delete', 'patch'].includes(config.method || '')) {
     const match = document.cookie.match(/(?:^|;\s*)csrf_token=([^;]*)/);
