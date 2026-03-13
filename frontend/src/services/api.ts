@@ -1,6 +1,11 @@
 import axios from 'axios';
 
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || (import.meta.env.DEV ? 'http://localhost:3800/api/v1' : '/api/v1');
+// In production, force relative URL to go through Vercel proxy (avoids mixed content).
+// Any http:// URL set via env vars is auto-upgraded to https:// in production.
+let API_BASE_URL = import.meta.env.VITE_API_BASE_URL || (import.meta.env.DEV ? 'http://localhost:3800/api/v1' : '/api/v1');
+if (!import.meta.env.DEV && API_BASE_URL.startsWith('http://')) {
+  API_BASE_URL = API_BASE_URL.replace('http://', 'https://');
+}
 
 const api = axios.create({
   baseURL: API_BASE_URL,
@@ -10,7 +15,7 @@ const api = axios.create({
   headers: { 'Content-Type': 'application/json' },
 });
 
-// Request interceptor: explicitly attach CSRF token from cookie to header
+// Request interceptor: attach CSRF token from cookie to header
 api.interceptors.request.use((config) => {
   if (['post', 'put', 'delete', 'patch'].includes(config.method || '')) {
     const match = document.cookie.match(/(?:^|;\s*)csrf_token=([^;]*)/);
