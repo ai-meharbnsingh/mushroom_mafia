@@ -10,12 +10,16 @@ router = APIRouter()
 async def websocket_endpoint(websocket: WebSocket):
     """WebSocket endpoint for real-time dashboard updates.
 
-    Authenticates the user via a JWT token from cookies.
+    Authenticates the user via a JWT token from cookies or query parameter.
     Once connected, the user receives real-time sensor updates, alerts,
     and relay commands for all devices belonging to their owner.
     """
     try:
+        # Try cookie first, then query parameter (for cross-origin connections
+        # where cookies set via Vercel proxy won't be sent to Railway directly)
         token = websocket.cookies.get("access_token")
+        if not token:
+            token = websocket.query_params.get("token")
         if not token:
             raise ValueError("No token")
         payload = decode_token(token)

@@ -1,27 +1,37 @@
 import { useEffect, useRef, useCallback } from 'react';
-import { useAppActions } from '@/store/AppContext';
+import { useApp, useAppActions } from '@/store/AppContext';
 import { mapSensorReading } from '@/utils/mappers';
 import type { Alert, RelayType } from '@/types';
 
 const WS_BASE_URL = import.meta.env.VITE_WS_BASE_URL || 'ws://localhost:3800/api/v1';
+const MAX_RECONNECT_ATTEMPTS = 10;
 
 export function useWebSocketSimulation() {
+  const { state } = useApp();
   const { setWsConnected, setSensorReading, addAlert, updateRelayState, addToast } = useAppActions();
   const wsRef = useRef<WebSocket | null>(null);
   const reconnectTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const reconnectAttempts = useRef(0);
 
   const connect = useCallback(() => {
+    // Don't connect if not authenticated
+    if (!state.isAuthenticated) {
+      return;
+    }
 
     // Close existing connection if any
     if (wsRef.current) {
       wsRef.current.close();
     }
 
-    const ws = new WebSocket(`${WS_BASE_URL}/ws`);
+    // Pass token as query parameter for cross-origin auth (Vercel → Railway)
+    const tokenParam = state.accessToken ? `?token=${encodeURIComponent(state.accessToken)}` : '';
+    const ws = new WebSocket(`${WS_BASE_URL}/ws${tokenParam}`);
 
     ws.onopen = () => {
       console.log('[WebSocket] Connected');
       setWsConnected(true);
+      reconnectAttempts.current = 0; // Reset on successful connection
     };
 
     ws.onmessage = (event) => {
@@ -70,10 +80,8 @@ export function useWebSocketSimulation() {
             }
             break;
           case 'alert_acknowledged':
-            // UPDATE_ALERT expects a full Alert object; we do our best with available data
             break;
           case 'device_status_change':
-            // UPDATE_DEVICE expects a full Device object; handled at page level
             break;
           case 'device_registered':
             if (data.payload) {
@@ -91,11 +99,25 @@ export function useWebSocketSimulation() {
       }
     };
 
-    ws.onclose = () => {
+    ws.onclose = (event) => {
       console.log('[WebSocket] Disconnected');
       setWsConnected(false);
-      // Auto-reconnect after 3 seconds
-      reconnectTimer.current = setTimeout(connect, 3000);
+
+      // Don't reconnect if auth failed (4001) or too many attempts
+      if (event.code === 4001) {
+        console.log('[WebSocket] Auth failed, not reconnecting');
+        return;
+      }
+
+      if (reconnectAttempts.current < MAX_RECONNECT_ATTEMPTS) {
+        // Exponential backoff: 3s, 6s, 12s, 24s... capped at 60s
+        const delay = Math.min(3000 * Math.pow(2, reconnectAttempts.current), 60000);
+        reconnectAttempts.current += 1;
+        console.log(`[WebSocket] Reconnecting in ${delay / 1000}s (attempt ${reconnectAttempts.current}/${MAX_RECONNECT_ATTEMPTS})`);
+        reconnectTimer.current = setTimeout(connect, delay);
+      } else {
+        console.log('[WebSocket] Max reconnect attempts reached');
+      }
     };
 
     ws.onerror = () => {
@@ -103,7 +125,7 @@ export function useWebSocketSimulation() {
     };
 
     wsRef.current = ws;
-  }, [setWsConnected, setSensorReading, addAlert, updateRelayState, addToast]);
+  }, [state.isAuthenticated, state.accessToken, setWsConnected, setSensorReading, addAlert, updateRelayState, addToast]);
 
   useEffect(() => {
     connect();
