@@ -1,10 +1,8 @@
 import axios from 'axios';
 
-// In production, use relative URL to go through Vercel proxy.
-// Env var is only used in development mode.
-const API_BASE_URL = import.meta.env.DEV
-  ? (import.meta.env.VITE_API_BASE_URL || 'http://localhost:3800/api/v1')
-  : '/api/v1';
+// Use VITE_API_BASE_URL env var if set (Railway URL in prod, localhost in dev).
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL
+  || (import.meta.env.DEV ? 'http://localhost:3800/api/v1' : '/api/v1');
 
 // Bearer token storage — solves Vercel proxy not forwarding cookies to Railway
 let _accessToken: string | null = null;
