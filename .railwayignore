@@ -1,10 +1,19 @@
-# Ignore everything...
-*
+# Explicitly ignore all large/irrelevant directories at the root level
+Docs/
+Firmware/
+certs/
+e2e/
+frontend/
+marketing_site/
+node_modules/
+playwright-report/
+screenshots/
+test-results/
+tools/
+venv/
+venv13/
 
-# ...except the backend folder
-!backend/
-
-# Ignore cache and tests within backend
+# Ignore cache, environments, and tests within backend/
 backend/venv/
 backend/__pycache__/
 backend/*.pyc
@@ -20,5 +29,5 @@ backend/tests/
 backend/reports/
 backend/list/
 
-# Ignore git folder
+# Ignore local git history
 .git/
