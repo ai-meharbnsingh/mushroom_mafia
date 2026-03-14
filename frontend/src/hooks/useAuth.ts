@@ -1,6 +1,7 @@
 import { useCallback, useState } from 'react';
 import { useApp, useAppActions } from '@/store/AppContext';
 import { authService } from '@/services/authService';
+import { getApiToken } from '@/services/api';
 import type { User } from '@/types';
 
 interface LoginCredentials {
@@ -53,7 +54,7 @@ export function useAuth() {
         ...userData,
         id: userData.user_id?.toString() || userData.id?.toString(),
       };
-      login(user);
+      login(user, getApiToken() || undefined);
       return true;
     } catch {
       return false;

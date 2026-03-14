@@ -3,10 +3,10 @@ import { useApp, useAppActions } from '@/store/AppContext';
 import { mapSensorReading } from '@/utils/mappers';
 import type { Alert, RelayType } from '@/types';
 
-// In production, ALWAYS use wss:// on current host. Env var only used in dev.
-const WS_BASE_URL = import.meta.env.DEV
-  ? (import.meta.env.VITE_WS_BASE_URL || 'ws://localhost:3800/api/v1')
-  : `wss://${window.location.host}/api/v1`;
+// WebSocket must connect directly to the backend (Vercel can't proxy WebSockets).
+// In production, use VITE_WS_BASE_URL (points to Railway). In dev, use localhost.
+const WS_BASE_URL = import.meta.env.VITE_WS_BASE_URL
+  || (import.meta.env.DEV ? 'ws://localhost:3800/api/v1' : `wss://${window.location.host}/api/v1`);
 const MAX_RECONNECT_ATTEMPTS = 10;
 
 export function useWebSocketSimulation() {

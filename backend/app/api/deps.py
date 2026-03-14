@@ -35,19 +35,28 @@ async def get_current_user(
     credentials: HTTPAuthorizationCredentials = Depends(security),
     db: AsyncSession = Depends(get_db),
 ) -> User:
-    """Extract user from JWT token from cookie or header and enforce CSRF."""
-    if request.method in ["POST", "PUT", "DELETE", "PATCH"]:
+    """Extract user from JWT token from Bearer header or cookie, enforce CSRF for cookie auth."""
+    # Prefer Bearer token (from Authorization header) — CSRF-immune
+    token = None
+    using_bearer = False
+    if credentials:
+        token = credentials.credentials
+        using_bearer = True
+
+    # Fall back to cookie-based auth
+    if not token:
+        token = request.cookies.get("access_token")
+
+    # CSRF only needed for cookie-based auth (Bearer tokens are CSRF-immune)
+    if not using_bearer and request.method in ["POST", "PUT", "DELETE", "PATCH"]:
         csrf_cookie = request.cookies.get("csrf_token")
         csrf_header = request.headers.get("x-csrf-token")
         if not csrf_cookie or not csrf_header or csrf_cookie != csrf_header:
             raise HTTPException(
-                status_code=status.HTTP_403_FORBIDDEN, 
+                status_code=status.HTTP_403_FORBIDDEN,
                 detail="CSRF token missing or invalid"
             )
 
-    token = request.cookies.get("access_token")
-    if not token and credentials:
-        token = credentials.credentials
     if not token:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Not authenticated")
     try:
