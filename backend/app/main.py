@@ -87,6 +87,7 @@ app = FastAPI(
     description="REST API for mushroom farm IoT monitoring — manages plants, rooms, devices, sensors, relays, growth cycles, harvests, and real-time climate data.",
     version="1.0.0",
     lifespan=lifespan,
+    redirect_slashes=False,
 )
 
 # Middleware ordering: outermost first
