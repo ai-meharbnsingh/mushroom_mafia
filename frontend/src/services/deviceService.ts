@@ -1,7 +1,7 @@
 import api from './api';
 
 export const deviceService = {
-  getAll: () => api.get('/devices').then(r => r.data),
+  getAll: () => api.get('/devices/').then(r => r.data),
   getById: (id: number) => api.get(`/devices/${id}`).then(r => r.data),
   update: (id: number, data: any) => api.put(`/devices/${id}`, data).then(r => r.data),
   delete: (id: number) => api.delete(`/devices/${id}`),

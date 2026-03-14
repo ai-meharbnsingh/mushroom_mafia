@@ -10,7 +10,7 @@ export interface GenerateReportPayload {
 }
 
 export const reportService = {
-  getAll: () => api.get('/reports').then(r => r.data),
+  getAll: () => api.get('/reports/').then(r => r.data),
 
   getById: (id: number) => api.get(`/reports/${id}`).then(r => r.data),
 
