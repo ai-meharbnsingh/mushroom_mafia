@@ -90,6 +90,16 @@ app = FastAPI(
     redirect_slashes=False,
 )
 
+
+@app.middleware("http")
+async def normalize_trailing_slash(request, call_next):
+    """Silently append trailing slash instead of 307 redirect (avoids CORS issues)."""
+    path = request.scope["path"]
+    if not path.endswith("/") and "/." not in path and not path.startswith("/docs") and not path.startswith("/openapi"):
+        request.scope["path"] = path + "/"
+    return await call_next(request)
+
+
 # Middleware ordering: outermost first
 # 1. Request ID (outermost — every request gets an ID)
 app.add_middleware(RequestIdMiddleware)
