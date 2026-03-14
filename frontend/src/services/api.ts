@@ -1,11 +1,10 @@
 import axios from 'axios';
 
-// In production, force relative URL to go through Vercel proxy (avoids mixed content).
-// Any http:// URL set via env vars is auto-upgraded to https:// in production.
-let API_BASE_URL = import.meta.env.VITE_API_BASE_URL || (import.meta.env.DEV ? 'http://localhost:3800/api/v1' : '/api/v1');
-if (!import.meta.env.DEV && API_BASE_URL.startsWith('http://')) {
-  API_BASE_URL = API_BASE_URL.replace('http://', 'https://');
-}
+// In production, ALWAYS use relative URL to go through Vercel proxy (avoids mixed content).
+// Env var is only used in development mode.
+const API_BASE_URL = import.meta.env.DEV
+  ? (import.meta.env.VITE_API_BASE_URL || 'http://localhost:3800/api/v1')
+  : '/api/v1';
 
 const api = axios.create({
   baseURL: API_BASE_URL,
