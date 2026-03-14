@@ -87,24 +87,13 @@ app = FastAPI(
     description="REST API for mushroom farm IoT monitoring — manages plants, rooms, devices, sensors, relays, growth cycles, harvests, and real-time climate data.",
     version="1.0.0",
     lifespan=lifespan,
-    redirect_slashes=False,
 )
 
-
-@app.middleware("http")
-async def normalize_trailing_slash(request, call_next):
-    """Silently append trailing slash instead of 307 redirect (avoids CORS issues)."""
-    path = request.scope["path"]
-    if not path.endswith("/") and "/." not in path and not path.startswith("/docs") and not path.startswith("/openapi"):
-        request.scope["path"] = path + "/"
-    return await call_next(request)
-
-
-# Middleware ordering: outermost first
-# 1. Request ID (outermost — every request gets an ID)
+# Middleware ordering: last added = outermost (processed first)
+# 1. Request ID
 app.add_middleware(RequestIdMiddleware)
 
-# 2. CORS
+# 2. CORS — must be outermost so redirect responses (307) also get CORS headers
 app.add_middleware(
     CORSMiddleware,
     allow_origins=settings.cors_origins_list,
