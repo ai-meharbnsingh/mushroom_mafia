@@ -223,27 +223,9 @@ jobs:
         run: cd Firmware && pio run
 
   # ===========================================================================
-  # Job 6: Deploy Backend (Railway)
-  # Only on push to main, after ALL test jobs pass.
-  # Requires RAILWAY_TOKEN secret.
+  # Note: Railway backend auto-deploys from main via its GitHub integration.
+  # No CI deploy step needed — Railway watches the repo directly.
   # ===========================================================================
-  deploy-backend:
-    name: Deploy Backend (Railway)
-    runs-on: ubuntu-latest
-    needs: [backend-tests, frontend-tests, firmware-checks]
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Install Railway CLI
-        run: npm install -g @railway/cli
-
-      - name: Deploy to Railway
-        run: railway up --service 2aeed26f-150a-4d6b-964c-0565c02df496
-        env:
-          RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
-          RAILWAY_PROJECT_ID: f7aa68d6-708c-4f91-a7d5-31256539983f
 
   # ===========================================================================
   # Job 7: Deploy Frontend (Vercel)
