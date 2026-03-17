@@ -1,8 +1,8 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useRef, useState, useCallback } from 'react';
 import { gsap } from 'gsap';
 import {
   Leaf, DoorOpen, Cpu, Users, Bell, AlertTriangle, CheckCircle, Wifi, WifiOff,
-  ArrowRight, Clock, CircleDot,
+  ArrowRight, Clock, CircleDot, TrendingUp, RefreshCw, Award, Activity,
 } from 'lucide-react';
 import { MetricCard } from '@/components/cards/MetricCard';
 import { Button } from '@/components/ui/button';
@@ -13,6 +13,8 @@ import type { AdminDashboardSummary } from '@/types';
 import {
   PieChart, Pie, Cell, ResponsiveContainer, BarChart, Bar, XAxis, YAxis, Tooltip,
 } from 'recharts';
+
+const REFRESH_INTERVAL = 15_000;
 
 const COLORS = {
   online: '#27FB6B',
@@ -29,6 +31,9 @@ const COLORS = {
   critical: '#FF2D55',
   warning: '#FFD166',
   acknowledged: '#2EEFFF',
+  gradeA: '#27FB6B',
+  gradeB: '#FFD166',
+  gradeC: '#FF2D55',
 };
 
 const CustomTooltip = ({ active, payload }: { active?: boolean; payload?: any[] }) => {
@@ -43,29 +48,65 @@ const CustomTooltip = ({ active, payload }: { active?: boolean; payload?: any[] 
   return null;
 };
 
+// Plant health score (0-100)
+function computePlantHealth(plant: { totalDevices: number; onlineDevices: number; activeAlerts: number }): number {
+  if (plant.totalDevices === 0) return 0;
+  let score = 100;
+  const offlineDevices = plant.totalDevices - plant.onlineDevices;
+  score -= offlineDevices * 15;
+  score -= plant.activeAlerts * 8;
+  return Math.max(0, Math.min(100, score));
+}
+
+function healthColor(score: number): string {
+  if (score >= 80) return '#27FB6B';
+  if (score >= 50) return '#FFD166';
+  return '#FF2D55';
+}
+
 export const AdminDashboard: React.FC = () => {
   const navigate = useNavigate();
   const sectionRefs = useRef<(HTMLDivElement | null)[]>([]);
   const [data, setData] = useState<AdminDashboardSummary | null>(null);
   const [loading, setLoading] = useState(true);
+  const [lastRefresh, setLastRefresh] = useState<Date>(new Date());
+  const [refreshing, setRefreshing] = useState(false);
+  const animatedRef = useRef(false);
 
-  useEffect(() => {
-    dashboardService.getAdminSummary()
-      .then(raw => setData(mapAdminDashboardSummary(raw)))
-      .catch(() => {})
-      .finally(() => setLoading(false));
+  const fetchData = useCallback(async (showSpinner = false) => {
+    if (showSpinner) setLoading(true);
+    else setRefreshing(true);
+    try {
+      const raw = await dashboardService.getAdminSummary();
+      setData(mapAdminDashboardSummary(raw));
+      setLastRefresh(new Date());
+    } catch {
+      if (showSpinner) setData(null);
+    } finally {
+      setLoading(false);
+      setRefreshing(false);
+    }
   }, []);
 
   useEffect(() => {
-    sectionRefs.current.forEach((ref, index) => {
-      if (ref) {
-        gsap.fromTo(
-          ref,
-          { opacity: 0, y: 12 },
-          { opacity: 1, y: 0, duration: 0.5, delay: index * 0.08, ease: 'power3.out' }
-        );
-      }
-    });
+    fetchData(true);
+    const interval = setInterval(() => fetchData(false), REFRESH_INTERVAL);
+    return () => clearInterval(interval);
+  }, [fetchData]);
+
+  useEffect(() => {
+    if (data && !animatedRef.current) {
+      animatedRef.current = true;
+      sectionRefs.current.forEach((ref, index) => {
+        if (ref) {
+          gsap.fromTo(
+            ref,
+            { opacity: 0, y: 12 },
+            { opacity: 1, y: 0, duration: 0.5, delay: index * 0.08, ease: 'power3.out' }
+          );
+        }
+      });
+    }
   }, [data]);
 
   if (loading) {
@@ -105,12 +146,13 @@ export const AdminDashboard: React.FC = () => {
     { name: 'Storage', value: data.roomTypes.storage, fill: COLORS.storage },
   ];
 
-  const getPlantHealthColor = (plant: typeof data.plants[0]) => {
-    if (plant.totalDevices === 0) return '#6D7484';
-    if (plant.onlineDevices === plant.totalDevices) return '#27FB6B';
-    if (plant.onlineDevices > 0) return '#FFD166';
-    return '#FF2D55';
-  };
+  // Grade distribution pie
+  const totalGrades = data.overallGradeA + data.overallGradeB + data.overallGradeC;
+  const gradePieData = [
+    { name: 'Grade A', value: data.overallGradeA, color: COLORS.gradeA },
+    { name: 'Grade B', value: data.overallGradeB, color: COLORS.gradeB },
+    { name: 'Grade C', value: data.overallGradeC, color: COLORS.gradeC },
+  ].filter(d => d.value > 0);
 
   const timeAgo = (timestamp: string) => {
     if (!timestamp) return 'N/A';
@@ -123,23 +165,59 @@ export const AdminDashboard: React.FC = () => {
     return `${Math.floor(hrs / 24)}d ago`;
   };
 
+  // Compute total monthly yield across all plants
+  const totalMonthYield = data.plants.reduce((sum, p) => sum + p.monthYieldKg, 0);
+  const totalMonthHarvests = data.plants.reduce((sum, p) => sum + p.monthHarvests, 0);
+
+  // Compute overall system health score
+  const systemHealthScore = data.totalDevices > 0
+    ? Math.max(0, Math.min(100,
+        100
+        - (data.deviceStatus.offline * 10)
+        - (data.alerts.critical * 10)
+        - (data.alerts.warning * 3)
+      ))
+    : 0;
+
   return (
     <div className="space-y-8">
       {/* Section 1: Page Header */}
-      <div ref={el => { sectionRefs.current[0] = el; }}>
-        <h1 className="text-2xl font-bold text-iot-primary mb-1">Admin Dashboard</h1>
-        <p className="text-sm text-iot-secondary">Fleet & infrastructure overview</p>
+      <div ref={el => { sectionRefs.current[0] = el; }} className="flex items-center justify-between">
+        <div>
+          <div className="flex items-center gap-3">
+            <h1 className="text-2xl font-bold text-iot-primary mb-1">Admin Dashboard</h1>
+            {data.totalDevices > 0 && (
+              <div
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-bold"
+                style={{ backgroundColor: healthColor(systemHealthScore) + '1A', color: healthColor(systemHealthScore) }}
+              >
+                <Activity className="w-4 h-4" />
+                {systemHealthScore}
+                <span className="text-[10px] font-normal opacity-60">/ 100</span>
+              </div>
+            )}
+          </div>
+          <p className="text-sm text-iot-secondary">Fleet & infrastructure overview</p>
+        </div>
+        <div className="flex items-center gap-2 text-xs text-iot-muted">
+          <RefreshCw className={`w-3 h-3 ${refreshing ? 'animate-spin text-cyan-400' : ''}`} />
+          <span>
+            {refreshing ? 'Refreshing...' : `Auto-refresh every 15s | ${lastRefresh.toLocaleTimeString()}`}
+          </span>
+        </div>
       </div>
 
       {/* Section 2: Fleet Summary Cards */}
-      <div ref={el => { sectionRefs.current[1] = el; }} className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        <MetricCard title="Total Plants" value={data.totalPlants} icon={Leaf} color="cyan" />
-        <MetricCard title="Total Rooms" value={data.totalRooms} icon={DoorOpen} color="purple" />
-        <MetricCard title="Total Devices" value={data.totalDevices} icon={Cpu} color="green" />
-        <MetricCard title="Total Users" value={data.totalUsers} icon={Users} color="yellow" />
+      <div ref={el => { sectionRefs.current[1] = el; }} className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
+        <MetricCard title="Plants" value={data.totalPlants} icon={Leaf} color="cyan" />
+        <MetricCard title="Rooms" value={data.totalRooms} icon={DoorOpen} color="purple" />
+        <MetricCard title="Devices" value={data.totalDevices} icon={Cpu} color="green" />
+        <MetricCard title="Users" value={data.totalUsers} icon={Users} color="yellow" />
+        <MetricCard title="Month Yield" value={Number(totalMonthYield.toFixed(1))} icon={TrendingUp} color="green" suffix=" kg" />
+        <MetricCard title="Harvests" value={totalMonthHarvests} icon={Leaf} color="cyan" />
       </div>
 
-      {/* Section 3: Device Fleet Status + Subscriptions */}
+      {/* Section 3: Device Fleet Status + Grade Distribution */}
       <div ref={el => { sectionRefs.current[2] = el; }} className="grid grid-cols-1 lg:grid-cols-2 gap-4">
         {/* Device Status Donut */}
         <div className="bg-iot-secondary rounded-2xl p-5 border border-iot-subtle">
@@ -191,6 +269,87 @@ export const AdminDashboard: React.FC = () => {
           </div>
         </div>
 
+        {/* Grade Distribution (new from PPT) */}
+        <div className="bg-iot-secondary rounded-2xl p-5 border border-iot-subtle">
+          <div className="flex items-center justify-between mb-4">
+            <h2 className="text-lg font-semibold text-iot-primary">Yield & Grading</h2>
+            <div className="text-right">
+              <p className="text-2xl font-bold font-mono text-green-400">{data.overallYieldKg.toFixed(1)} <span className="text-sm font-normal text-iot-muted">kg</span></p>
+              <p className="text-[10px] text-iot-muted uppercase">This Month</p>
+            </div>
+          </div>
+          {totalGrades > 0 ? (
+            <div className="flex items-center gap-6">
+              <div className="w-36 h-36">
+                <ResponsiveContainer width="100%" height="100%">
+                  <PieChart>
+                    <Pie
+                      data={gradePieData}
+                      cx="50%"
+                      cy="50%"
+                      innerRadius={35}
+                      outerRadius={58}
+                      paddingAngle={2}
+                      dataKey="value"
+                    >
+                      {gradePieData.map((entry, i) => (
+                        <Cell key={i} fill={entry.color} />
+                      ))}
+                    </Pie>
+                    <Tooltip content={<CustomTooltip />} />
+                  </PieChart>
+                </ResponsiveContainer>
+              </div>
+              <div className="space-y-3 flex-1">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <span className="w-3 h-3 rounded-full" style={{ backgroundColor: COLORS.gradeA }} />
+                    <span className="text-sm text-iot-secondary">Grade A</span>
+                  </div>
+                  <div className="text-right">
+                    <span className="text-sm font-mono text-iot-primary">{data.overallGradeA}</span>
+                    <span className="text-[10px] text-iot-muted ml-2">
+                      ({Math.round((data.overallGradeA / totalGrades) * 100)}%)
+                    </span>
+                  </div>
+                </div>
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <span className="w-3 h-3 rounded-full" style={{ backgroundColor: COLORS.gradeB }} />
+                    <span className="text-sm text-iot-secondary">Grade B</span>
+                  </div>
+                  <div className="text-right">
+                    <span className="text-sm font-mono text-iot-primary">{data.overallGradeB}</span>
+                    <span className="text-[10px] text-iot-muted ml-2">
+                      ({Math.round((data.overallGradeB / totalGrades) * 100)}%)
+                    </span>
+                  </div>
+                </div>
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <span className="w-3 h-3 rounded-full" style={{ backgroundColor: COLORS.gradeC }} />
+                    <span className="text-sm text-iot-secondary">Grade C</span>
+                  </div>
+                  <div className="text-right">
+                    <span className="text-sm font-mono text-iot-primary">{data.overallGradeC}</span>
+                    <span className="text-[10px] text-iot-muted ml-2">
+                      ({Math.round((data.overallGradeC / totalGrades) * 100)}%)
+                    </span>
+                  </div>
+                </div>
+              </div>
+            </div>
+          ) : (
+            <div className="text-center py-6">
+              <Award className="w-8 h-8 text-iot-muted mx-auto mb-2 opacity-40" />
+              <p className="text-sm text-iot-muted">No harvests recorded this month</p>
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* Section 4: Subscription Status + Alert Summary */}
+      <div ref={el => { sectionRefs.current[3] = el; }} className="grid grid-cols-1 lg:grid-cols-2 gap-4">
         {/* Subscription Status */}
         <div className="bg-iot-secondary rounded-2xl p-5 border border-iot-subtle">
           <h2 className="text-lg font-semibold text-iot-primary mb-4">License Key Status</h2>
@@ -222,106 +381,6 @@ export const AdminDashboard: React.FC = () => {
                 </div>
               </div>
             ))}
-          </div>
-        </div>
-      </div>
-
-      {/* Section 4: Plant Overview Table */}
-      <div ref={el => { sectionRefs.current[3] = el; }}>
-        <div className="flex items-center justify-between mb-4">
-          <h2 className="text-lg font-semibold text-iot-primary">Plant Overview</h2>
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => navigate('/plants')}
-            className="border-iot-subtle text-iot-secondary hover:text-iot-primary"
-          >
-            Manage Plants
-          </Button>
-        </div>
-        <div className="bg-iot-secondary rounded-2xl border border-iot-subtle overflow-hidden">
-          <table className="w-full">
-            <thead>
-              <tr className="border-b border-iot-subtle">
-                <th className="text-left text-xs font-medium text-iot-muted uppercase tracking-wider p-4">Plant</th>
-                <th className="text-left text-xs font-medium text-iot-muted uppercase tracking-wider p-4">Type</th>
-                <th className="text-center text-xs font-medium text-iot-muted uppercase tracking-wider p-4">Rooms</th>
-                <th className="text-center text-xs font-medium text-iot-muted uppercase tracking-wider p-4">Devices</th>
-                <th className="text-center text-xs font-medium text-iot-muted uppercase tracking-wider p-4">Online</th>
-                <th className="text-center text-xs font-medium text-iot-muted uppercase tracking-wider p-4">Alerts</th>
-                <th className="text-center text-xs font-medium text-iot-muted uppercase tracking-wider p-4">Health</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-iot-subtle">
-              {data.plants.map(plant => (
-                <tr
-                  key={plant.plantId}
-                  className="hover:bg-iot-tertiary/50 transition-colors cursor-pointer"
-                  onClick={() => navigate('/plants')}
-                >
-                  <td className="p-4">
-                    <div>
-                      <p className="text-sm font-medium text-iot-primary">{plant.plantName}</p>
-                      <p className="text-xs text-iot-muted">{plant.plantCode}</p>
-                    </div>
-                  </td>
-                  <td className="p-4">
-                    <span className="text-xs font-medium text-iot-secondary bg-iot-tertiary px-2 py-1 rounded">
-                      {plant.plantType}
-                    </span>
-                  </td>
-                  <td className="p-4 text-center text-sm font-mono text-iot-primary">{plant.totalRooms}</td>
-                  <td className="p-4 text-center text-sm font-mono text-iot-primary">{plant.totalDevices}</td>
-                  <td className="p-4 text-center text-sm font-mono" style={{ color: COLORS.online }}>
-                    {plant.onlineDevices}
-                  </td>
-                  <td className="p-4 text-center">
-                    {plant.activeAlerts > 0 ? (
-                      <span className="text-sm font-mono" style={{ color: COLORS.critical }}>
-                        {plant.activeAlerts}
-                      </span>
-                    ) : (
-                      <span className="text-sm text-iot-muted">0</span>
-                    )}
-                  </td>
-                  <td className="p-4 text-center">
-                    <div
-                      className="w-3 h-3 rounded-full mx-auto"
-                      style={{ backgroundColor: getPlantHealthColor(plant) }}
-                    />
-                  </td>
-                </tr>
-              ))}
-              {data.plants.length === 0 && (
-                <tr>
-                  <td colSpan={7} className="p-8 text-center text-sm text-iot-muted">
-                    No plants registered yet
-                  </td>
-                </tr>
-              )}
-            </tbody>
-          </table>
-        </div>
-      </div>
-
-      {/* Section 5: Room Type Distribution + Alert Summary */}
-      <div ref={el => { sectionRefs.current[4] = el; }} className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-        {/* Room Type Distribution */}
-        <div className="bg-iot-secondary rounded-2xl p-5 border border-iot-subtle">
-          <h2 className="text-lg font-semibold text-iot-primary mb-4">Room Type Distribution</h2>
-          <div className="h-48">
-            <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={roomTypeData} layout="vertical">
-                <XAxis type="number" stroke="#6D7484" fontSize={10} />
-                <YAxis type="category" dataKey="name" stroke="#6D7484" fontSize={11} width={80} />
-                <Tooltip content={<CustomTooltip />} />
-                <Bar dataKey="value" radius={[0, 4, 4, 0]}>
-                  {roomTypeData.map((entry, i) => (
-                    <Cell key={i} fill={entry.fill} />
-                  ))}
-                </Bar>
-              </BarChart>
-            </ResponsiveContainer>
           </div>
         </div>
 
@@ -363,8 +422,165 @@ export const AdminDashboard: React.FC = () => {
         </div>
       </div>
 
-      {/* Section 6: Recent Activity Feed */}
-      <div ref={el => { sectionRefs.current[5] = el; }}>
+      {/* Section 5: Plant Overview Table (enhanced with health score) */}
+      <div ref={el => { sectionRefs.current[4] = el; }}>
+        <div className="flex items-center justify-between mb-4">
+          <h2 className="text-lg font-semibold text-iot-primary">Plant Overview</h2>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => navigate('/plants')}
+            className="border-iot-subtle text-iot-secondary hover:text-iot-primary"
+          >
+            Manage Plants
+          </Button>
+        </div>
+        <div className="bg-iot-secondary rounded-2xl border border-iot-subtle overflow-hidden">
+          <table className="w-full">
+            <thead>
+              <tr className="border-b border-iot-subtle">
+                <th className="text-left text-xs font-medium text-iot-muted uppercase tracking-wider p-4">Plant</th>
+                <th className="text-left text-xs font-medium text-iot-muted uppercase tracking-wider p-4">Type</th>
+                <th className="text-center text-xs font-medium text-iot-muted uppercase tracking-wider p-4">Rooms</th>
+                <th className="text-center text-xs font-medium text-iot-muted uppercase tracking-wider p-4">Devices</th>
+                <th className="text-center text-xs font-medium text-iot-muted uppercase tracking-wider p-4">Online</th>
+                <th className="text-center text-xs font-medium text-iot-muted uppercase tracking-wider p-4">Alerts</th>
+                <th className="text-center text-xs font-medium text-iot-muted uppercase tracking-wider p-4">Month Yield</th>
+                <th className="text-center text-xs font-medium text-iot-muted uppercase tracking-wider p-4">Health</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-iot-subtle">
+              {data.plants.map(plant => {
+                const score = computePlantHealth(plant);
+                const color = healthColor(score);
+                return (
+                  <tr
+                    key={plant.plantId}
+                    className="hover:bg-iot-tertiary/50 transition-colors cursor-pointer"
+                    onClick={() => navigate(`/plants/${plant.plantId}`)}
+                  >
+                    <td className="p-4">
+                      <div>
+                        <p className="text-sm font-medium text-iot-primary">{plant.plantName}</p>
+                        <p className="text-xs text-iot-muted">{plant.plantCode}</p>
+                      </div>
+                    </td>
+                    <td className="p-4">
+                      <span className="text-xs font-medium text-iot-secondary bg-iot-tertiary px-2 py-1 rounded">
+                        {plant.plantType}
+                      </span>
+                    </td>
+                    <td className="p-4 text-center text-sm font-mono text-iot-primary">{plant.totalRooms}</td>
+                    <td className="p-4 text-center text-sm font-mono text-iot-primary">{plant.totalDevices}</td>
+                    <td className="p-4 text-center text-sm font-mono" style={{ color: COLORS.online }}>
+                      {plant.onlineDevices}
+                    </td>
+                    <td className="p-4 text-center">
+                      {plant.activeAlerts > 0 ? (
+                        <span className="text-sm font-mono" style={{ color: COLORS.critical }}>
+                          {plant.activeAlerts}
+                        </span>
+                      ) : (
+                        <span className="text-sm text-iot-muted">0</span>
+                      )}
+                    </td>
+                    <td className="p-4 text-center">
+                      {plant.monthHarvests > 0 ? (
+                        <div>
+                          <p className="text-sm font-mono text-green-400">{plant.monthYieldKg.toFixed(1)} kg</p>
+                          <p className="text-[10px] text-iot-muted">{plant.monthHarvests} harvest{plant.monthHarvests !== 1 ? 's' : ''}</p>
+                        </div>
+                      ) : (
+                        <span className="text-sm text-iot-muted">-</span>
+                      )}
+                    </td>
+                    <td className="p-4 text-center">
+                      <div className="flex items-center justify-center gap-1.5">
+                        <div
+                          className="w-3 h-3 rounded-full"
+                          style={{ backgroundColor: color }}
+                        />
+                        <span className="text-xs font-mono" style={{ color }}>{score}</span>
+                      </div>
+                    </td>
+                  </tr>
+                );
+              })}
+              {data.plants.length === 0 && (
+                <tr>
+                  <td colSpan={8} className="p-8 text-center text-sm text-iot-muted">
+                    No plants registered yet
+                  </td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      {/* Section 6: Room Type Distribution */}
+      <div ref={el => { sectionRefs.current[5] = el; }} className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+        <div className="bg-iot-secondary rounded-2xl p-5 border border-iot-subtle">
+          <h2 className="text-lg font-semibold text-iot-primary mb-4">Room Type Distribution</h2>
+          <div className="h-48">
+            <ResponsiveContainer width="100%" height="100%">
+              <BarChart data={roomTypeData} layout="vertical">
+                <XAxis type="number" stroke="#6D7484" fontSize={10} />
+                <YAxis type="category" dataKey="name" stroke="#6D7484" fontSize={11} width={80} />
+                <Tooltip content={<CustomTooltip />} />
+                <Bar dataKey="value" radius={[0, 4, 4, 0]}>
+                  {roomTypeData.map((entry, i) => (
+                    <Cell key={i} fill={entry.fill} />
+                  ))}
+                </Bar>
+              </BarChart>
+            </ResponsiveContainer>
+          </div>
+        </div>
+
+        {/* Device Freshness */}
+        <div className="bg-iot-secondary rounded-2xl p-5 border border-iot-subtle">
+          <h2 className="text-lg font-semibold text-iot-primary mb-4">Device Freshness</h2>
+          <div className="space-y-4">
+            {/* Online percentage bar */}
+            <div>
+              <div className="flex items-center justify-between mb-2">
+                <span className="text-sm text-iot-secondary">Online Rate</span>
+                <span className="text-sm font-mono" style={{ color: COLORS.online }}>
+                  {data.totalDevices > 0 ? Math.round((data.deviceStatus.online / data.totalDevices) * 100) : 0}%
+                </span>
+              </div>
+              <div className="h-3 bg-iot-tertiary rounded-full overflow-hidden">
+                <div
+                  className="h-full rounded-full transition-all"
+                  style={{
+                    width: data.totalDevices > 0 ? `${(data.deviceStatus.online / data.totalDevices) * 100}%` : '0%',
+                    backgroundColor: COLORS.online,
+                  }}
+                />
+              </div>
+            </div>
+
+            <div className="grid grid-cols-3 gap-3 pt-2">
+              <div className="text-center">
+                <p className="text-xl font-bold font-mono" style={{ color: COLORS.online }}>{data.deviceStatus.online}</p>
+                <p className="text-[10px] text-iot-muted uppercase">Online</p>
+              </div>
+              <div className="text-center">
+                <p className="text-xl font-bold font-mono" style={{ color: COLORS.offline }}>{data.deviceStatus.offline}</p>
+                <p className="text-[10px] text-iot-muted uppercase">Offline</p>
+              </div>
+              <div className="text-center">
+                <p className="text-xl font-bold font-mono" style={{ color: COLORS.unassigned }}>{data.deviceStatus.unassigned}</p>
+                <p className="text-[10px] text-iot-muted uppercase">Unassigned</p>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Section 7: Recent Activity Feed */}
+      <div ref={el => { sectionRefs.current[6] = el; }}>
         <h2 className="text-lg font-semibold text-iot-primary mb-4">Recent Activity</h2>
         <div className="bg-iot-secondary rounded-2xl border border-iot-subtle overflow-hidden">
           {data.recentEvents.length > 0 ? (
@@ -413,8 +629,8 @@ export const AdminDashboard: React.FC = () => {
         </div>
       </div>
 
-      {/* Section 7: Quick Navigation */}
-      <div ref={el => { sectionRefs.current[6] = el; }}>
+      {/* Section 8: Quick Navigation */}
+      <div ref={el => { sectionRefs.current[7] = el; }}>
         <h2 className="text-lg font-semibold text-iot-primary mb-4">Quick Actions</h2>
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
           {[

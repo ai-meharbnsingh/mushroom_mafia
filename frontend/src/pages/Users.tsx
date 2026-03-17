@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { gsap } from 'gsap';
-import { Plus, Search, Edit2, Lock, RefreshCw, Loader2 } from 'lucide-react';
+import { Plus, Search, Edit2, Lock, RefreshCw, Loader2, KeyRound } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import {
@@ -39,6 +39,7 @@ export const Users: React.FC = () => {
   const [fetchError, setFetchError] = useState<string | null>(null);
   const hasFetched = useRef(false);
 
+  const [showResetPassword, setShowResetPassword] = useState(false);
   const [formData, setFormData] = useState<UserFormData>({
     username: '',
     email: '',
@@ -99,11 +100,13 @@ export const Users: React.FC = () => {
   });
   
   const handleOpenDrawer = (user?: User) => {
+    setShowResetPassword(false);
     if (user) {
       setEditingUser(user);
       setFormData({
         username: user.username,
         email: user.email,
+        password: '',
         firstName: user.firstName,
         lastName: user.lastName,
         mobile: user.mobile || '',
@@ -134,9 +137,13 @@ export const Users: React.FC = () => {
 
     try {
       if (editingUser) {
+        if (formData.password && formData.password.length < 8) {
+          toast.error('Password must be at least 8 characters');
+          return;
+        }
         const res = await userService.update(Number(editingUser.id), toUserUpdate(formData));
         dispatch({ type: 'UPDATE_USER', payload: mapUser(res) });
-        toast.success('User updated successfully');
+        toast.success(formData.password ? 'User updated and password reset' : 'User updated successfully');
       } else {
         if (!formData.password) {
           toast.error('Password is required for new users');
@@ -197,6 +204,7 @@ export const Users: React.FC = () => {
           </SelectTrigger>
           <SelectContent className="bg-iot-secondary border-iot-subtle">
             <SelectItem value="ALL">All Roles</SelectItem>
+            <SelectItem value="SUPER_ADMIN">Super Admin</SelectItem>
             <SelectItem value="ADMIN">Admin</SelectItem>
             <SelectItem value="MANAGER">Manager</SelectItem>
             <SelectItem value="OPERATOR">Operator</SelectItem>
@@ -394,6 +402,45 @@ export const Users: React.FC = () => {
                   placeholder="Enter password"
                   className="input-dark w-full"
                 />
+              </div>
+            )}
+
+            {editingUser && (
+              <div>
+                {!showResetPassword ? (
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={() => setShowResetPassword(true)}
+                    className="border-iot-subtle text-iot-secondary hover:text-iot-cyan hover:border-iot-cyan w-full"
+                  >
+                    <KeyRound className="w-4 h-4 mr-2" />
+                    Reset Password
+                  </Button>
+                ) : (
+                  <div>
+                    <label className="block text-xs font-medium uppercase tracking-wider text-iot-secondary mb-2">
+                      New Password
+                    </label>
+                    <Input
+                      type="password"
+                      value={formData.password || ''}
+                      onChange={(e) => setFormData({ ...formData, password: e.target.value })}
+                      placeholder="Enter new password (min 8 characters)"
+                      className="input-dark w-full"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setShowResetPassword(false);
+                        setFormData({ ...formData, password: '' });
+                      }}
+                      className="text-xs text-iot-muted hover:text-iot-secondary mt-1"
+                    >
+                      Cancel password reset
+                    </button>
+                  </div>
+                )}
               </div>
             )}
             

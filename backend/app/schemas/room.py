@@ -1,15 +1,15 @@
 from datetime import datetime
 from typing import Optional
 
-from pydantic import BaseModel, ConfigDict, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from app.models.enums import RoomStatus
 
 
 class RoomCreate(BaseModel):
     plant_id: int
-    room_name: str
-    room_code: str
+    room_name: str = Field(..., min_length=1, max_length=100)
+    room_code: Optional[str] = Field(None, max_length=20)
     room_type: str
     room_size_sqft: Optional[float] = None
     no_of_racks: Optional[int] = None
@@ -20,7 +20,6 @@ class RoomCreate(BaseModel):
 
 class RoomUpdate(BaseModel):
     room_name: Optional[str] = None
-    room_code: Optional[str] = None
     room_type: Optional[str] = None
     room_size_sqft: Optional[float] = None
     no_of_racks: Optional[int] = None

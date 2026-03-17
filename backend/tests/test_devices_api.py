@@ -123,7 +123,8 @@ async def test_link_device_to_room(owner_client: AsyncClient, seed_plant_room_de
 
 @pytest.mark.asyncio
 async def test_approve_device(owner_client: AsyncClient, seed_plant_room_device):
-    """POST /api/v1/devices/{id}/approve — APPROVE generates MQTT creds, sets ACTIVE."""
+    """POST /api/v1/devices/{id}/approve — APPROVE generates MQTT creds, sets ACTIVE.
+    Uses owner_client (ADMIN) for provision/link, then re-logs as SUPER_ADMIN for approve."""
     csrf = _extract_csrf(owner_client)
     room_id = seed_plant_room_device["room"].room_id
 
@@ -150,10 +151,20 @@ async def test_approve_device(owner_client: AsyncClient, seed_plant_room_device)
             headers={"x-csrf-token": csrf},
         )
 
+    # Re-login as SUPER_ADMIN for approve (requires SUPER_ADMIN role)
+    login_resp = await owner_client.post(
+        "/api/v1/auth/login",
+        json={"username": "admin", "password": "admin123"},
+    )
+    assert login_resp.status_code == 200
+    for key, value in login_resp.cookies.items():
+        owner_client.cookies.set(key, value)
+    admin_csrf = _extract_csrf(owner_client)
+
     response = await owner_client.post(
         f"/api/v1/devices/{device_id}/approve",
         json={"action": "APPROVE"},
-        headers={"x-csrf-token": csrf},
+        headers={"x-csrf-token": admin_csrf},
     )
     assert response.status_code == 200, response.text
     data = response.json()
@@ -162,7 +173,8 @@ async def test_approve_device(owner_client: AsyncClient, seed_plant_room_device)
 
 @pytest.mark.asyncio
 async def test_reject_device(owner_client: AsyncClient, seed_plant_room_device):
-    """POST /api/v1/devices/{id}/approve — REJECT reverts to PENDING."""
+    """POST /api/v1/devices/{id}/approve — REJECT reverts to PENDING.
+    Uses owner_client (ADMIN) for provision/link, then re-logs as SUPER_ADMIN for reject."""
     csrf = _extract_csrf(owner_client)
     room_id = seed_plant_room_device["room"].room_id
 
@@ -189,10 +201,20 @@ async def test_reject_device(owner_client: AsyncClient, seed_plant_room_device):
             headers={"x-csrf-token": csrf},
         )
 
+    # Re-login as SUPER_ADMIN for reject (requires SUPER_ADMIN role)
+    login_resp = await owner_client.post(
+        "/api/v1/auth/login",
+        json={"username": "admin", "password": "admin123"},
+    )
+    assert login_resp.status_code == 200
+    for key, value in login_resp.cookies.items():
+        owner_client.cookies.set(key, value)
+    admin_csrf = _extract_csrf(owner_client)
+
     response = await owner_client.post(
         f"/api/v1/devices/{device_id}/approve",
         json={"action": "REJECT"},
-        headers={"x-csrf-token": csrf},
+        headers={"x-csrf-token": admin_csrf},
     )
     assert response.status_code == 200, response.text
     data = response.json()

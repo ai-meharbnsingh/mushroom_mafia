@@ -1,8 +1,8 @@
 from datetime import datetime, timezone
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Request, status
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, or_
+from sqlalchemy import select
 
 from app.database import get_db
 from app.utils.time import utcnow_naive
@@ -10,7 +10,7 @@ from app.models.device import Device
 from app.models.room import Room
 from app.models.plant import Plant
 from app.models.user import User
-from app.models.enums import UserRole, SubscriptionStatus
+from app.models.enums import UserRole, SubscriptionStatus, AuditAction
 from app.schemas.device import (
     DeviceUpdate,
     DeviceResponse,
@@ -28,11 +28,11 @@ from app.schemas.device import (
 )
 from app.utils.security import (
     generate_license_key,
-    generate_device_password,
     encrypt_device_password,
 )
 from app.api.deps import get_current_user, require_roles
 from app.services.ws_manager import ws_manager
+from app.services.audit_service import write_audit_log
 
 router = APIRouter()
 
@@ -59,14 +59,9 @@ async def list_devices(
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
-    """List devices. Join rooms->plants to filter by owner_id.
-    Include unassigned devices (room_id=null) that belong to the owner's rooms."""
+    """List devices filtered by owner_id. Unassigned devices only visible to admins of same org."""
     assigned_conditions = [
         Plant.owner_id == current_user.owner_id,
-        Device.is_active == True,
-    ]
-    unassigned_conditions = [
-        Device.room_id.is_(None),
         Device.is_active == True,
     ]
 
@@ -74,14 +69,11 @@ async def list_devices(
 
     if not is_admin:
         if not current_user.assigned_plants:
-            return [] # Non-admins with no plants see no devices
+            return []
         assigned_ids = [int(pid) for pid in current_user.assigned_plants]
         assigned_conditions.append(Plant.plant_id.in_(assigned_ids))
-        # Non-admins do not see unassigned devices by default (or maybe they shouldn't)
-        # We will set unassigned_conditions to False for non-admins to hide unassigned devices
-        unassigned_conditions.append(False)
 
-    # Devices assigned to rooms owned by current user's organization (and assigned plants)
+    # Devices assigned to rooms owned by current user's organization
     assigned_query = (
         select(Device)
         .join(Room, Device.room_id == Room.room_id)
@@ -89,14 +81,32 @@ async def list_devices(
         .where(*assigned_conditions)
     )
     result_assigned = await db.execute(assigned_query)
-    assigned_devices = result_assigned.scalars().all()
+    assigned_devices = list(result_assigned.scalars().all())
 
-    # Unassigned devices
-    unassigned_query = select(Device).where(*unassigned_conditions)
-    result_unassigned = await db.execute(unassigned_query)
-    unassigned_devices = result_unassigned.scalars().all()
+    # Unassigned devices — only admins, scoped to their org's plants
+    unassigned_devices = []
+    if is_admin:
+        unassigned_query = select(Device).where(
+            Device.room_id.is_(None),
+            Device.is_active == True,
+            Device.assigned_to_plant_id.in_(
+                select(Plant.plant_id).where(Plant.owner_id == current_user.owner_id)
+            ),
+        )
+        result_unassigned = await db.execute(unassigned_query)
+        unassigned_devices = list(result_unassigned.scalars().all())
 
-    return list(assigned_devices) + list(unassigned_devices)
+        # SUPER_ADMIN also sees truly orphaned devices (no plant yet)
+        if current_user.role == UserRole.SUPER_ADMIN:
+            orphan_query = select(Device).where(
+                Device.room_id.is_(None),
+                Device.assigned_to_plant_id.is_(None),
+                Device.is_active == True,
+            )
+            result_orphan = await db.execute(orphan_query)
+            unassigned_devices += list(result_orphan.scalars().all())
+
+    return assigned_devices + unassigned_devices
 
 
 @router.get("/{device_id}", response_model=DeviceResponse, summary="Get a device by ID")
@@ -182,6 +192,7 @@ async def update_device(
 @router.delete("/{device_id}", status_code=status.HTTP_200_OK, summary="Deactivate a device")
 async def delete_device(
     device_id: int,
+    request: Request,
     current_user: User = Depends(
         require_roles(UserRole.ADMIN, UserRole.SUPER_ADMIN)
     ),
@@ -199,6 +210,13 @@ async def delete_device(
             status_code=status.HTTP_404_NOT_FOUND, detail="Device not found"
         )
     device.is_active = False
+    await write_audit_log(
+        db, AuditAction.DELETE,
+        user_id=current_user.user_id, table_name="devices",
+        record_id=device_id,
+        old_value={"device_name": device.device_name, "license_key": device.license_key},
+        request=request,
+    )
     await db.commit()
     return {"detail": "Device deactivated"}
 
@@ -206,6 +224,7 @@ async def delete_device(
 @router.post("/provision", response_model=DeviceProvisionResponse, summary="Provision a new device and generate license key")
 async def provision_device(
     provision_in: DeviceProvision,
+    request: Request,
     current_user: User = Depends(require_roles(UserRole.SUPER_ADMIN, UserRole.ADMIN)),
     db: AsyncSession = Depends(get_db),
 ):
@@ -225,6 +244,15 @@ async def provision_device(
     db.add(device)
     await db.commit()
     await db.refresh(device)
+
+    await write_audit_log(
+        db, AuditAction.CREATE,
+        user_id=current_user.user_id, table_name="devices",
+        record_id=device.device_id,
+        new_value={"device_name": device.device_name, "mac_address": device.mac_address, "license_key": license_key},
+        request=request,
+    )
+    await db.commit()
 
     return DeviceProvisionResponse(
         device_id=device.device_id,
@@ -264,8 +292,9 @@ async def assign_device(
             status_code=status.HTTP_404_NOT_FOUND, detail="Plant not found"
         )
 
-    # Generate and encrypt device password
-    plain_password = generate_device_password()
+    # Use the HiveMQ broker password so the device can authenticate
+    from app.config import settings
+    plain_password = settings.MQTT_PASSWORD
     encrypted_password = encrypt_device_password(plain_password)
 
     device.device_password = encrypted_password
@@ -287,6 +316,7 @@ async def assign_device(
 async def kill_switch(
     device_id: int,
     kill_in: KillSwitchRequest,
+    request: Request,
     current_user: User = Depends(require_roles(UserRole.SUPER_ADMIN, UserRole.ADMIN)),
     db: AsyncSession = Depends(get_db),
 ):
@@ -311,11 +341,20 @@ async def kill_switch(
             detail="Action must be ENABLE or DISABLE",
         )
 
+    old_status = device.subscription_status.value
     if action == "DISABLE":
         device.subscription_status = SubscriptionStatus.SUSPENDED
     else:
         device.subscription_status = SubscriptionStatus.ACTIVE
 
+    await write_audit_log(
+        db, AuditAction.CONFIG_CHANGE,
+        user_id=current_user.user_id, table_name="devices",
+        record_id=device_id,
+        old_value={"subscription_status": old_status},
+        new_value={"subscription_status": device.subscription_status.value, "action": action},
+        request=request,
+    )
     await db.commit()
 
     # Publish control command via MQTT
@@ -461,11 +500,11 @@ async def link_device(
 @router.get("/pending-approval", response_model=list[PendingApprovalResponse], summary="List devices awaiting approval")
 async def list_pending_approval_devices(
     current_user: User = Depends(
-        require_roles(UserRole.SUPER_ADMIN, UserRole.ADMIN)
+        require_roles(UserRole.SUPER_ADMIN)
     ),
     db: AsyncSession = Depends(get_db),
 ):
-    """List devices with subscription_status=PENDING_APPROVAL (ADMIN+ only)."""
+    """List devices with subscription_status=PENDING_APPROVAL (SUPER_ADMIN only)."""
     result = await db.execute(
         select(
             Device.device_id,
@@ -505,12 +544,13 @@ async def list_pending_approval_devices(
 async def approve_device(
     device_id: int,
     approve_in: DeviceApproveRequest,
+    request: Request,
     current_user: User = Depends(
-        require_roles(UserRole.SUPER_ADMIN, UserRole.ADMIN)
+        require_roles(UserRole.SUPER_ADMIN)
     ),
     db: AsyncSession = Depends(get_db),
 ):
-    """Approve or reject a device that is pending approval (ADMIN+ only).
+    """Approve or reject a device that is pending approval (SUPER_ADMIN only).
 
     APPROVE: Generate MQTT credentials, set status to ACTIVE.
     REJECT: Revert status to PENDING, clear room assignment and link info.
@@ -540,11 +580,20 @@ async def approve_device(
         )
 
     if action == "APPROVE":
-        # Generate MQTT credentials
-        plain_password = generate_device_password()
+        # Use the HiveMQ broker password so the device can authenticate
+        from app.config import settings
+        plain_password = settings.MQTT_PASSWORD
         encrypted_password = encrypt_device_password(plain_password)
         device.device_password = encrypted_password
         device.subscription_status = SubscriptionStatus.ACTIVE
+        await write_audit_log(
+            db, AuditAction.CONFIG_CHANGE,
+            user_id=current_user.user_id, table_name="devices",
+            record_id=device_id,
+            old_value={"subscription_status": "PENDING_APPROVAL"},
+            new_value={"subscription_status": "ACTIVE", "action": "APPROVE"},
+            request=request,
+        )
         await db.commit()
         await db.refresh(device)
         return {
@@ -558,6 +607,14 @@ async def approve_device(
         device.room_id = None
         device.linked_by_user_id = None
         device.linked_at = None
+        await write_audit_log(
+            db, AuditAction.CONFIG_CHANGE,
+            user_id=current_user.user_id, table_name="devices",
+            record_id=device_id,
+            old_value={"subscription_status": "PENDING_APPROVAL"},
+            new_value={"subscription_status": "PENDING", "action": "REJECT"},
+            request=request,
+        )
         await db.commit()
         await db.refresh(device)
         return {

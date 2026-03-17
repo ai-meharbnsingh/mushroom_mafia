@@ -108,7 +108,7 @@ export const Rooms: React.FC = () => {
   };
 
   const handleSave = async () => {
-    if (!formData.name || !formData.code || !formData.plantId) {
+    if (!formData.name || !formData.plantId) {
       toast.error('Please fill in all required fields');
       return;
     }
@@ -367,18 +367,20 @@ export const Rooms: React.FC = () => {
               />
             </div>
 
-            <div>
-              <label className="block text-xs font-medium uppercase tracking-wider text-iot-secondary mb-2">
-                Room Code *
-              </label>
-              <Input
-                type="text"
-                value={formData.code}
-                onChange={(e) => setFormData({ ...formData, code: e.target.value })}
-                placeholder="e.g., NVF-A1"
-                className="input-dark w-full"
-              />
-            </div>
+            {editingRoom && (
+              <div>
+                <label className="block text-xs font-medium uppercase tracking-wider text-iot-secondary mb-2">
+                  Room Code
+                </label>
+                <Input
+                  type="text"
+                  value={formData.code}
+                  disabled
+                  className="input-dark w-full opacity-60 cursor-not-allowed"
+                />
+                <p className="text-[10px] text-iot-muted mt-1">Auto-generated, cannot be changed</p>
+              </div>
+            )}
 
             <div>
               <label className="block text-xs font-medium uppercase tracking-wider text-iot-secondary mb-2">

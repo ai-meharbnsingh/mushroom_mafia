@@ -16,21 +16,39 @@ from app.schemas.auth import (
 from app.schemas.user import UserResponse
 from app.services.auth_service import authenticate_user, create_tokens
 from app.models.user import User
+from app.models.enums import AuditAction
 from app.utils.security import decode_token, hash_password, verify_password
+from app.services.audit_service import write_audit_log
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
 
 
 @router.post("/login", response_model=TokenResponse, dependencies=[Depends(safe_rate_limit(times=5, seconds=60))])
-async def login(request: LoginRequest, response: Response, db: AsyncSession = Depends(get_db)):
+async def login(login_request: LoginRequest, http_request: Request, response: Response, db: AsyncSession = Depends(get_db)):
     """Authenticate user and return access + refresh tokens."""
-    user = await authenticate_user(db, request.username, request.password)
+    user = await authenticate_user(db, login_request.username, login_request.password)
     if not user:
+        await write_audit_log(
+            db, AuditAction.LOGIN,
+            table_name="users",
+            new_value={"username": login_request.username, "success": False},
+            request=http_request,
+        )
+        await db.commit()
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid username or password",
         )
+
+    await write_audit_log(
+        db, AuditAction.LOGIN,
+        user_id=user.user_id, table_name="users",
+        record_id=user.user_id,
+        new_value={"username": user.username, "success": True},
+        request=http_request,
+    )
+    await db.commit()
 
     tokens = create_tokens(user)
     csrf_token = secrets.token_urlsafe(32)
@@ -112,17 +130,25 @@ async def get_me(current_user: User = Depends(get_current_user)):
 
 @router.post("/change-password")
 async def change_password(
-    request: ChangePasswordRequest,
+    change_req: ChangePasswordRequest,
+    http_request: Request,
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
     """Change current user's password after validating old password."""
-    if not verify_password(request.old_password, current_user.password_hash):
+    if not verify_password(change_req.old_password, current_user.password_hash):
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Old password is incorrect",
         )
 
-    current_user.password_hash = hash_password(request.new_password)
+    current_user.password_hash = hash_password(change_req.new_password)
+    await write_audit_log(
+        db, AuditAction.CONFIG_CHANGE,
+        user_id=current_user.user_id, table_name="users",
+        record_id=current_user.user_id,
+        new_value={"action": "password_changed"},
+        request=http_request,
+    )
     await db.commit()
     return {"detail": "Password changed successfully"}

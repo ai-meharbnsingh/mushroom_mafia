@@ -95,6 +95,17 @@ const DataInitializer: React.FC<{ children: React.ReactNode }> = ({ children }) 
           ? (Array.isArray(devicesRes.value) ? devicesRes.value : []).map((d: any) => mapDevice(d, rooms))
           : [];
 
+        // Enrich rooms with device info (backend doesn't include device data in room response)
+        for (const device of devices) {
+          if (device.assignedRoomId) {
+            const room = rooms.find(r => r.id === device.assignedRoomId);
+            if (room) {
+              room.deviceId = device.id;
+              room.deviceName = device.name;
+            }
+          }
+        }
+
         const alerts = alertsRes.status === 'fulfilled'
           ? (Array.isArray(alertsRes.value) ? alertsRes.value : []).map((a: any) => mapAlert(a, rooms, devices))
           : [];

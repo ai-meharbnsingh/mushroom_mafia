@@ -15,9 +15,13 @@ void sendHTTPRequest() {
         return;
     }
 
+    esp_task_wdt_reset();  // Feed watchdog before TLS operation
+
     WiFiClientSecure client;
     client.setInsecure();
+    client.setTimeout(10);  // 10 second TLS timeout
     HTTPClient http;
+    http.setTimeout(10000);  // 10 second HTTP timeout
 
     // Build full URL
     String url = String(apiBaseURL) + String(readingsEndpoint);
@@ -68,6 +72,7 @@ void sendHTTPRequest() {
     }
 
     http.end();
+    esp_task_wdt_reset();  // Feed watchdog after HTTP operation
     delay(100);
 
     // Poll for relay commands after sending reading
@@ -83,9 +88,13 @@ void pollRelayCommands() {
         return;
     }
 
+    esp_task_wdt_reset();  // Feed watchdog before TLS operation
+
     WiFiClientSecure client;
     client.setInsecure();
+    client.setTimeout(10);  // 10 second TLS timeout
     HTTPClient http;
+    http.setTimeout(10000);  // 10 second HTTP timeout
 
     String url = String(apiBaseURL) + String(commandsEndpoint) + String(deviceId) + "/commands";
     http.begin(client, url);
@@ -118,9 +127,13 @@ void pollRelayCommands() {
 void sendHeartbeat() {
     if (deviceId <= 0 || WiFi.status() != WL_CONNECTED) return;
 
+    esp_task_wdt_reset();  // Feed watchdog before TLS operation
+
     WiFiClientSecure client;
     client.setInsecure();
+    client.setTimeout(10);  // 10 second TLS timeout
     HTTPClient http;
+    http.setTimeout(10000);  // 10 second HTTP timeout
 
     String url = String(apiBaseURL) + String(heartbeatEndpoint);
     http.begin(client, url);
@@ -166,9 +179,13 @@ void pollProvisionEndpoint() {
         return;
     }
 
+    esp_task_wdt_reset();  // Feed watchdog before TLS operation
+
     WiFiClientSecure client;
     client.setInsecure();
+    client.setTimeout(10);  // 10 second TLS timeout
     HTTPClient http;
+    http.setTimeout(10000);  // 10 second HTTP timeout
 
     String url = String(apiBaseURL) + String(provisionEndpoint) + String(licenseKey);
     http.begin(client, url);

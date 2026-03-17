@@ -37,7 +37,7 @@
 
 // ─── EEPROM Config Version (Risk 5) ─────────────────────────────────
 // Increment this when EEPROM layout changes to auto-reset stale data.
-#define CONFIG_VERSION 3  // Bumped: fixed version stamp order, clears stale MQTT/API from EEPROM
+#define CONFIG_VERSION 7  // Current version — increment to force EEPROM reset on existing devices
 #define ADDR_CONFIG_VERSION 274           // 1 byte for config version
 
 int row = 0;

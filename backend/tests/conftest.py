@@ -388,6 +388,15 @@ async def seed_thresholds(db_session: AsyncSession, seed_owner_plant_room_device
     return thresholds
 
 
+@pytest.fixture(autouse=True)
+def clear_rate_limit_state():
+    """Clear in-memory rate limit state between tests to prevent 429 bleed-over."""
+    from app.api.deps import _memory_rate_limits
+    _memory_rate_limits.clear()
+    yield
+    _memory_rate_limits.clear()
+
+
 @pytest_asyncio.fixture()
 async def client() -> AsyncGenerator[AsyncClient, None]:
     """

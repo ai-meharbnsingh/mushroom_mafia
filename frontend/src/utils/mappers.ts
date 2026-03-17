@@ -250,6 +250,8 @@ export function mapAdminDashboardSummary(data: any): AdminDashboardSummary {
       totalDevices: p.total_devices ?? 0,
       onlineDevices: p.online_devices ?? 0,
       activeAlerts: p.active_alerts ?? 0,
+      monthYieldKg: p.month_yield_kg ?? 0,
+      monthHarvests: p.month_harvests ?? 0,
     })),
     recentEvents: (data.recent_events ?? []).map((e: any) => ({
       deviceId: String(e.device_id),
@@ -257,6 +259,11 @@ export function mapAdminDashboardSummary(data: any): AdminDashboardSummary {
       event: e.event ?? '',
       timestamp: e.timestamp ?? '',
     })),
+    overallYieldKg: data.overall_yield_kg ?? 0,
+    overallHarvests: data.overall_harvests ?? 0,
+    overallGradeA: data.overall_grade_a ?? 0,
+    overallGradeB: data.overall_grade_b ?? 0,
+    overallGradeC: data.overall_grade_c ?? 0,
   };
 }
 
@@ -265,7 +272,6 @@ export function toPlantCreate(data: any, ownerId: number = 1) {
   const payload: any = {
     owner_id: ownerId,
     plant_name: data.name,
-    plant_code: data.code,
     plant_type: data.type,
     location: data.location,
     address: data.address,
@@ -294,7 +300,6 @@ export function toPlantCreate(data: any, ownerId: number = 1) {
 export function toPlantUpdate(data: any) {
   return {
     plant_name: data.name,
-    plant_code: data.code,
     plant_type: data.type,
     location: data.location,
     address: data.address,
@@ -322,6 +327,11 @@ export function mapPlantDashboardSummary(data: any): PlantDashboardSummary {
     onlineDevices: data.online_devices ?? 0,
     activeAlerts: data.active_alerts ?? 0,
     criticalAlerts: data.critical_alerts ?? 0,
+    monthYieldKg: data.month_yield_kg ?? 0,
+    monthHarvests: data.month_harvests ?? 0,
+    monthGradeA: data.month_grade_a ?? 0,
+    monthGradeB: data.month_grade_b ?? 0,
+    monthGradeC: data.month_grade_c ?? 0,
     rooms: (data.rooms ?? []).map((r: any) => ({
       roomId: String(r.room_id),
       roomName: r.room_name ?? '',
@@ -330,7 +340,21 @@ export function mapPlantDashboardSummary(data: any): PlantDashboardSummary {
       status: r.status ?? 'ACTIVE',
       hasDevice: r.has_device ?? false,
       deviceName: r.device_name,
+      deviceId: r.device_id,
       isOnline: r.is_online ?? false,
+      co2Ppm: r.co2_ppm,
+      roomTemp: r.room_temp,
+      roomHumidity: r.room_humidity,
+      bagTemps: r.bag_temps ?? [],
+      lastReadingAt: r.last_reading_at,
+      monthYieldKg: r.month_yield_kg ?? 0,
+      monthHarvests: r.month_harvests ?? 0,
+      gradeA: r.grade_a ?? 0,
+      gradeB: r.grade_b ?? 0,
+      gradeC: r.grade_c ?? 0,
+      growthStage: r.growth_stage,
+      daysInStage: r.days_in_stage,
+      activeAlerts: r.active_alerts ?? 0,
     })),
   };
 }
@@ -339,7 +363,6 @@ export function toRoomCreate(data: any) {
   return {
     plant_id: Number(data.plantId),
     room_name: data.name,
-    room_code: data.code,
     room_type: data.roomType,
     room_size_sqft: data.sizeSqft,
     no_of_racks: data.racks,
@@ -352,7 +375,6 @@ export function toRoomCreate(data: any) {
 export function toRoomUpdate(data: any) {
   return {
     room_name: data.name,
-    room_code: data.code,
     room_type: data.roomType,
     room_size_sqft: data.sizeSqft,
     no_of_racks: data.racks,
@@ -377,7 +399,7 @@ export function toUserCreate(data: any, ownerId: number = 1) {
 }
 
 export function toUserUpdate(data: any) {
-  return {
+  const payload: any = {
     username: data.username,
     email: data.email,
     first_name: data.firstName,
@@ -386,6 +408,10 @@ export function toUserUpdate(data: any) {
     role: data.role,
     assigned_plants: data.assignedPlants?.map(Number),
   };
+  if (data.password) {
+    payload.password = data.password;
+  }
+  return payload;
 }
 
 // --- Pending Device (from onboarding/approval flow) ---

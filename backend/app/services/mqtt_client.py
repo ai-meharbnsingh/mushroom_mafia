@@ -294,12 +294,4 @@ class MQTTManager:
                 license_key,
             )
 
-    async def publish_broadcast_control(self, action: str):
-        """Broadcast control to ALL devices."""
-        if self._client:
-            topic = "farm/broadcast/control"
-            payload = json.dumps({"action": action})
-            await self._client.publish(topic, payload)
-
-
 mqtt_manager = MQTTManager()

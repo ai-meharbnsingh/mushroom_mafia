@@ -2,27 +2,27 @@ import re
 from datetime import date, datetime
 from typing import Optional
 
-from pydantic import BaseModel, ConfigDict, field_validator, model_validator
+from pydantic import BaseModel, ConfigDict, EmailStr, Field, field_validator, model_validator
 
 
 class NewAdminInline(BaseModel):
-    username: str
-    email: str
-    password: str
-    first_name: str
-    last_name: str
-    mobile: Optional[str] = None
+    username: str = Field(..., min_length=2, max_length=50)
+    email: EmailStr
+    password: str = Field(..., min_length=8, max_length=128)
+    first_name: str = Field(..., min_length=1, max_length=50)
+    last_name: str = Field(..., min_length=1, max_length=50)
+    mobile: Optional[str] = Field(None, max_length=15)
 
 
 class PlantCreate(BaseModel):
     owner_id: int
-    plant_name: str
-    plant_code: str
+    plant_name: str = Field(..., min_length=1, max_length=100)
+    plant_code: Optional[str] = Field(None, max_length=20)
     plant_type: str
-    location: Optional[str] = None
-    address: Optional[str] = None
-    city: str
-    state: str
+    location: Optional[str] = Field(None, max_length=100)
+    address: Optional[str] = Field(None, max_length=500)
+    city: str = Field(..., max_length=50)
+    state: str = Field(..., max_length=50)
     pincode: str
     latitude: Optional[float] = None
     longitude: Optional[float] = None
@@ -50,7 +50,6 @@ class PlantCreate(BaseModel):
 
 class PlantUpdate(BaseModel):
     plant_name: Optional[str] = None
-    plant_code: Optional[str] = None
     plant_type: Optional[str] = None
     location: Optional[str] = None
     address: Optional[str] = None

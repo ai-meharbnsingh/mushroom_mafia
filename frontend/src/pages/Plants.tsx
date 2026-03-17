@@ -159,8 +159,8 @@ export const Plants: React.FC = () => {
   };
 
   const handleSave = async () => {
-    if (!formData.name || !formData.code || !formData.city || !formData.state || !formData.pincode) {
-      toast.error('Please fill in all required fields (name, code, city, state, pincode)');
+    if (!formData.name || !formData.city || !formData.state || !formData.pincode) {
+      toast.error('Please fill in all required fields (name, city, state, pincode)');
       return;
     }
     if (!/^\d{6}$/.test(formData.pincode)) {
@@ -374,18 +374,20 @@ export const Plants: React.FC = () => {
               />
             </div>
 
-            <div>
-              <label className="block text-xs font-medium uppercase tracking-wider text-iot-secondary mb-2">
-                Plant Code *
-              </label>
-              <Input
-                type="text"
-                value={formData.code}
-                onChange={(e) => setFormData({ ...formData, code: e.target.value })}
-                placeholder="e.g., NVF"
-                className="input-dark w-full"
-              />
-            </div>
+            {editingPlant && (
+              <div>
+                <label className="block text-xs font-medium uppercase tracking-wider text-iot-secondary mb-2">
+                  Plant Code
+                </label>
+                <Input
+                  type="text"
+                  value={formData.code}
+                  disabled
+                  className="input-dark w-full opacity-60 cursor-not-allowed"
+                />
+                <p className="text-[10px] text-iot-muted mt-1">Auto-generated, cannot be changed</p>
+              </div>
+            )}
 
             <div>
               <label className="block text-xs font-medium uppercase tracking-wider text-iot-secondary mb-2">

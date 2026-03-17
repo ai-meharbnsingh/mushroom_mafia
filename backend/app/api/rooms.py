@@ -1,6 +1,6 @@
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select
+from sqlalchemy import select, func
 
 from app.database import get_db
 from app.models.room import Room
@@ -18,9 +18,9 @@ async def list_rooms(
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
-    """List rooms. Join with plants to filter by owner_id."""
+    """List rooms. Join with plants to filter by owner_id. Only SUPER_ADMIN sees all."""
     conditions = [Plant.owner_id == current_user.owner_id, Room.is_active == True]
-    if current_user.role not in [UserRole.SUPER_ADMIN, UserRole.ADMIN]:
+    if current_user.role != UserRole.SUPER_ADMIN:
         if not current_user.assigned_plants:
             return []
         assigned_ids = [int(pid) for pid in current_user.assigned_plants]
@@ -82,7 +82,20 @@ async def create_room(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Plant does not belong to your organization",
         )
-    room = Room(**room_in.model_dump())
+
+    room_data = room_in.model_dump()
+
+    # Auto-generate room_code if not provided: {PLANT_CODE}-R01, R02, ...
+    if not room_data.get("room_code"):
+        count_result = await db.execute(
+            select(func.count()).select_from(Room).where(
+                Room.plant_id == room_in.plant_id
+            )
+        )
+        next_num = (count_result.scalar() or 0) + 1
+        room_data["room_code"] = f"{plant.plant_code}-R{next_num:02d}"
+
+    room = Room(**room_data)
     db.add(room)
     await db.commit()
     await db.refresh(room)

@@ -1,4 +1,6 @@
 import logging
+import time
+from collections import defaultdict
 
 from fastapi import Depends, Header, HTTPException, status, Request
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
@@ -14,9 +16,13 @@ from app.utils.security import decode_token
 logger = logging.getLogger(__name__)
 security = HTTPBearer(auto_error=False)
 
+# In-memory rate limit fallback when Redis is unavailable.
+# Key: (client_ip, route), Value: list of request timestamps.
+_memory_rate_limits: dict[tuple[str, str], list[float]] = defaultdict(list)
+
 
 def safe_rate_limit(times: int = 5, seconds: int = 60):
-    """Rate limiter that gracefully skips when Redis is unavailable."""
+    """Rate limiter with in-memory fallback when Redis is unavailable."""
     async def _dependency(request: Request):
         try:
             from fastapi_limiter.depends import RateLimiter
@@ -25,8 +31,22 @@ def safe_rate_limit(times: int = 5, seconds: int = 60):
         except HTTPException:
             raise  # Re-raise 429 Too Many Requests
         except Exception:
-            # Redis unavailable — skip rate limiting rather than blocking requests
-            logger.warning("Rate limiter unavailable, allowing request")
+            # Redis unavailable — use in-memory fallback
+            client_ip = request.client.host if request.client else "unknown"
+            key = (client_ip, request.url.path)
+            now = time.monotonic()
+            # Purge expired entries
+            _memory_rate_limits[key] = [
+                t for t in _memory_rate_limits[key] if now - t < seconds
+            ]
+            if len(_memory_rate_limits[key]) >= times:
+                logger.warning("In-memory rate limit hit for %s on %s", client_ip, request.url.path)
+                raise HTTPException(
+                    status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+                    detail="Too many requests",
+                )
+            _memory_rate_limits[key].append(now)
+            logger.debug("Rate limiter using in-memory fallback (Redis unavailable)")
     return _dependency
 
 

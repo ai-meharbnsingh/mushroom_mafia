@@ -262,6 +262,12 @@ export interface AdminDashboardSummary {
   alerts: { active: number; critical: number; warning: number; acknowledged: number; resolvedToday: number };
   plants: PlantOverview[];
   recentEvents: RecentDeviceEvent[];
+  // Overall monthly grade breakdown
+  overallYieldKg: number;
+  overallHarvests: number;
+  overallGradeA: number;
+  overallGradeB: number;
+  overallGradeC: number;
 }
 
 export interface PlantOverview {
@@ -273,6 +279,8 @@ export interface PlantOverview {
   totalDevices: number;
   onlineDevices: number;
   activeAlerts: number;
+  monthYieldKg: number;
+  monthHarvests: number;
 }
 
 export interface RecentDeviceEvent {
@@ -505,7 +513,25 @@ export interface PlantRoomSummary {
   status: string;
   hasDevice: boolean;
   deviceName?: string;
+  deviceId?: number;
   isOnline: boolean;
+  // Live sensor data
+  co2Ppm?: number | null;
+  roomTemp?: number | null;
+  roomHumidity?: number | null;
+  bagTemps: number[];
+  lastReadingAt?: string | null;
+  // Monthly harvest
+  monthYieldKg: number;
+  monthHarvests: number;
+  gradeA: number;
+  gradeB: number;
+  gradeC: number;
+  // Growth cycle
+  growthStage?: string | null;
+  daysInStage?: number | null;
+  // Per-room alert count
+  activeAlerts: number;
 }
 
 export interface PlantDashboardSummary {
@@ -521,6 +547,12 @@ export interface PlantDashboardSummary {
   onlineDevices: number;
   activeAlerts: number;
   criticalAlerts: number;
+  // Plant-level monthly totals
+  monthYieldKg: number;
+  monthHarvests: number;
+  monthGradeA: number;
+  monthGradeB: number;
+  monthGradeC: number;
   rooms: PlantRoomSummary[];
 }
 

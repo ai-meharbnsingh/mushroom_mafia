@@ -112,6 +112,7 @@ export const Devices: React.FC = () => {
   const tableRef = useRef<HTMLDivElement>(null);
 
   const isAdmin = checkPermission('ADMIN');
+  const isSuperAdmin = state.currentUser?.role === 'SUPER_ADMIN';
 
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState<'ALL' | 'ONLINE' | 'OFFLINE'>('ALL');
@@ -166,11 +167,11 @@ export const Devices: React.FC = () => {
     }
   }, []);
 
-  // Fetch pending approval devices for admins
+  // Fetch pending approval devices for super admins only
   useEffect(() => {
-    if (!isAdmin) return;
+    if (!isSuperAdmin) return;
     fetchPendingDevices();
-  }, [isAdmin]);
+  }, [isSuperAdmin]);
 
   const fetchPendingDevices = async () => {
     try {
@@ -431,8 +432,8 @@ export const Devices: React.FC = () => {
         </Select>
       </div>
 
-      {/* Pending Approval Section (Admin Only) */}
-      {isAdmin && pendingDevices.length > 0 && (
+      {/* Pending Approval Section (Super Admin Only) */}
+      {isSuperAdmin && pendingDevices.length > 0 && (
         <div className="bg-iot-secondary rounded-2xl border border-iot-orange/30 overflow-hidden">
           <div className="px-6 py-4 border-b border-iot-subtle flex items-center gap-2">
             <Clock className="w-4 h-4 text-iot-orange" />

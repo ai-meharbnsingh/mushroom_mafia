@@ -1,7 +1,9 @@
 bool authenticateDevKey(const char* tempDevKey) {
+    esp_task_wdt_reset();  // Feed watchdog before TLS operation
     StaticJsonDocument<200> doc;
     WiFiClientSecure client;
     client.setInsecure();
+    client.setTimeout(10);  // 10 second TLS timeout
     HTTPClient http;
 
     String newAuthURL = String(apiBaseURL) + String(registerEndpoint);

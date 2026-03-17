@@ -1,13 +1,13 @@
 from datetime import datetime
 from typing import Optional
 
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, Field
 
 
 class DeviceProvision(BaseModel):
     """Super Admin provisions a new device (factory step)."""
-    mac_address: str
-    device_name: str
+    mac_address: str = Field(..., min_length=17, max_length=17, pattern=r"^([0-9A-Fa-f]{2}:){5}[0-9A-Fa-f]{2}$")
+    device_name: str = Field(..., min_length=1, max_length=50)
     device_type: str = "ESP32"
 
 
@@ -21,6 +21,7 @@ class DeviceProvisionResponse(BaseModel):
 class DeviceUpdate(BaseModel):
     room_id: Optional[int] = None
     device_name: Optional[str] = None
+    mac_address: Optional[str] = None
 
 
 class DeviceAssignRequest(BaseModel):

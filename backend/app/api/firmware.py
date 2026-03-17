@@ -3,7 +3,7 @@ import io
 import logging
 import os
 import re
-from datetime import datetime, timezone
+from datetime import datetime
 from pathlib import Path
 
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form, status, Header
@@ -11,7 +11,6 @@ from fastapi.responses import FileResponse, StreamingResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, update, desc
 
-from app.config import settings
 from app.database import get_db
 from app.utils.time import utcnow_naive
 from app.models.device import Device

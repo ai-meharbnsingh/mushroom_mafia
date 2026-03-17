@@ -1,6 +1,6 @@
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select
+from sqlalchemy import select, func
 
 from app.database import get_db
 from app.models.plant import Plant
@@ -20,9 +20,9 @@ async def list_plants(
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
-    """List plants filtered by owner_id from JWT."""
+    """List plants filtered by owner_id from JWT. Only SUPER_ADMIN sees all."""
     conditions = [Plant.owner_id == current_user.owner_id, Plant.is_active == True]
-    if current_user.role not in [UserRole.SUPER_ADMIN, UserRole.ADMIN]:
+    if current_user.role != UserRole.SUPER_ADMIN:
         if not current_user.assigned_plants:
             return []
         assigned_ids = [int(pid) for pid in current_user.assigned_plants]
@@ -48,19 +48,18 @@ async def get_plant(
             status_code=status.HTTP_404_NOT_FOUND, detail="Plant not found"
         )
 
-    if current_user.role not in [UserRole.SUPER_ADMIN, UserRole.ADMIN]:
+    if plant.owner_id != current_user.owner_id:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Not allowed to view this plant",
+        )
+    if current_user.role != UserRole.SUPER_ADMIN:
         assigned_ids = [int(pid) for pid in (current_user.assigned_plants or [])]
         if plant.plant_id not in assigned_ids:
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail="Not allowed to view this plant",
             )
-
-    if plant.owner_id != current_user.owner_id:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Not allowed to view this plant",
-        )
     return plant
 
 
@@ -72,9 +71,20 @@ async def create_plant(
     ),
     db: AsyncSession = Depends(get_db),
 ):
-    """Create a new plant with mandatory admin attachment. ADMIN+ only."""
+    """Create a new plant with mandatory admin attachment. ADMIN+ only. Code auto-generated."""
     plant_data = plant_in.model_dump(exclude={"admin_user_id", "new_admin"})
     plant_data["owner_id"] = current_user.owner_id
+
+    # Auto-generate plant_code if not provided: PLT-001, PLT-002, ...
+    if not plant_data.get("plant_code"):
+        count_result = await db.execute(
+            select(func.count()).select_from(Plant).where(
+                Plant.owner_id == current_user.owner_id
+            )
+        )
+        next_num = (count_result.scalar() or 0) + 1
+        plant_data["plant_code"] = f"PLT-{next_num:03d}"
+
     plant = Plant(**plant_data)
     db.add(plant)
     await db.flush()
@@ -193,18 +203,18 @@ async def get_plant_rooms(
             status_code=status.HTTP_404_NOT_FOUND, detail="Plant not found"
         )
 
-    if current_user.role not in [UserRole.SUPER_ADMIN, UserRole.ADMIN]:
+    if plant.owner_id != current_user.owner_id:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Not allowed to view rooms for this plant",
+        )
+    if current_user.role != UserRole.SUPER_ADMIN:
         assigned_ids = [int(pid) for pid in (current_user.assigned_plants or [])]
         if plant.plant_id not in assigned_ids:
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail="Not allowed to view rooms for this plant",
             )
-    if plant.owner_id != current_user.owner_id:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Not allowed to view rooms for this plant",
-        )
     result = await db.execute(
         select(Room).where(Room.plant_id == plant_id, Room.is_active == True)
     )

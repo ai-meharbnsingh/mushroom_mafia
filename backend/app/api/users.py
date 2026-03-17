@@ -17,14 +17,37 @@ async def list_users(
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
-    """List users. RLS filter: only users with same owner_id."""
+    """List users. SUPER_ADMIN sees all org users. Others see only users sharing their plants."""
+    if current_user.role == UserRole.SUPER_ADMIN:
+        result = await db.execute(
+            select(User).where(
+                User.owner_id == current_user.owner_id,
+                User.is_active == True,
+            )
+        )
+        return result.scalars().all()
+
+    # Non-super-admin: fetch all org users, then filter to those sharing assigned plants
+    my_plants = set(int(pid) for pid in (current_user.assigned_plants or []))
+    if not my_plants:
+        return [current_user]  # At minimum, see yourself
+
     result = await db.execute(
         select(User).where(
             User.owner_id == current_user.owner_id,
             User.is_active == True,
         )
     )
-    return result.scalars().all()
+    all_users = result.scalars().all()
+    filtered = []
+    for u in all_users:
+        if u.user_id == current_user.user_id:
+            filtered.append(u)
+            continue
+        their_plants = set(int(pid) for pid in (u.assigned_plants or []))
+        if my_plants & their_plants:  # Intersection — shares at least one plant
+            filtered.append(u)
+    return filtered
 
 
 @router.get("/{user_id}", response_model=UserResponse)
