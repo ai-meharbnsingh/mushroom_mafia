@@ -240,9 +240,10 @@ jobs:
         run: npm install -g @railway/cli
 
       - name: Deploy to Railway
-        run: railway up --service backend
+        run: railway up --service 2aeed26f-150a-4d6b-964c-0565c02df496
         env:
           RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
+          RAILWAY_PROJECT_ID: f7aa68d6-708c-4f91-a7d5-31256539983f
 
   # ===========================================================================
   # Job 7: Deploy Frontend (Vercel)
