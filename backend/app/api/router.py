@@ -34,11 +34,17 @@ api_router.include_router(reports_router, prefix="/reports", tags=["Reports"])
 api_router.include_router(device_api_router, prefix="/device", tags=["Device API"])
 api_router.include_router(live_router, prefix="/live", tags=["Live Data"])
 api_router.include_router(dashboard_router, prefix="/dashboard", tags=["Dashboard"])
-api_router.include_router(readings_router, prefix="/readings", tags=["Historical Readings"])
+api_router.include_router(
+    readings_router, prefix="/readings", tags=["Historical Readings"]
+)
 api_router.include_router(ws_router, tags=["WebSocket"])
 api_router.include_router(emqx_auth_router, prefix="/emqx", tags=["EMQX Auth"])
 api_router.include_router(firmware_router, prefix="/firmware", tags=["Firmware OTA"])
 api_router.include_router(harvests_router, prefix="/harvests", tags=["Harvests"])
-api_router.include_router(growth_cycles_router, prefix="/growth-cycles", tags=["Growth Cycles"])
-api_router.include_router(climate_advisory_router, prefix="/advisory", tags=["Climate Advisory"])
+api_router.include_router(
+    growth_cycles_router, prefix="/growth-cycles", tags=["Growth Cycles"]
+)
+api_router.include_router(
+    climate_advisory_router, prefix="/advisory", tags=["Climate Advisory"]
+)
 api_router.include_router(inquiries_router, prefix="/inquiries", tags=["Inquiries"])

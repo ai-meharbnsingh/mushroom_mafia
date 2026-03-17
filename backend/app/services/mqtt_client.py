@@ -23,6 +23,7 @@ class MQTTManager:
         tls_context = None
         if getattr(settings, "MQTT_USE_TLS", False):
             import ssl
+
             tls_context = ssl.create_default_context()
 
         while self._running:
@@ -50,18 +51,16 @@ class MQTTManager:
                         await self._handle_message(message)
             except aiomqtt.MqttError as e:
                 if self._running:
-                    logger.warning(
-                        "MQTT disconnected: %s. Reconnecting in 5s...", e
-                    )
+                    logger.warning("MQTT disconnected: %s. Reconnecting in 5s...", e)
                     from app.middleware.metrics import record_metric
+
                     await record_metric("mqtt_reconnects", 1)
                     await asyncio.sleep(5)
             except Exception as e:
                 if self._running:
-                    logger.error(
-                        "MQTT error: %s. Reconnecting in 5s...", e
-                    )
+                    logger.error("MQTT error: %s. Reconnecting in 5s...", e)
                     from app.middleware.metrics import record_metric
+
                     await record_metric("mqtt_reconnects", 1)
                     await asyncio.sleep(5)
 
@@ -79,7 +78,9 @@ class MQTTManager:
             raw = raw.replace(":inf", ":null").replace(":-inf", ":null")
             payload = json.loads(raw)
         except (json.JSONDecodeError, UnicodeDecodeError):
-            logger.warning("Invalid MQTT payload on %s: %s", topic, message.payload[:200])
+            logger.warning(
+                "Invalid MQTT payload on %s: %s", topic, message.payload[:200]
+            )
             return
 
         parts = topic.split("/")
@@ -142,9 +143,7 @@ class MQTTManager:
                             ws_manager=ws_manager,
                         )
         except Exception as e:
-            logger.error(
-                "Error processing telemetry from %s: %s", license_key, e
-            )
+            logger.error("Error processing telemetry from %s: %s", license_key, e)
 
     async def _handle_status(self, license_key: str, data: dict):
         """Handle LWT / status messages (device offline)."""
@@ -157,21 +156,15 @@ class MQTTManager:
             if status == "offline":
                 async with async_session_factory() as db:
                     result = await db.execute(
-                        select(Device).where(
-                            Device.license_key == license_key
-                        )
+                        select(Device).where(Device.license_key == license_key)
                     )
                     device = result.scalar_one_or_none()
                     if device:
                         device.is_online = False
                         await db.commit()
-                        logger.info(
-                            "Device %s went offline (LWT)", license_key
-                        )
+                        logger.info("Device %s went offline (LWT)", license_key)
         except Exception as e:
-            logger.error(
-                "Error handling status from %s: %s", license_key, e
-            )
+            logger.error("Error handling status from %s: %s", license_key, e)
 
     async def _handle_relay_ack(self, license_key: str, data: dict):
         """Handle relay ACK from device — confirms relay state was applied.
@@ -197,7 +190,8 @@ class MQTTManager:
         if ack_status != "confirmed":
             logger.warning(
                 "Relay ACK from %s with non-confirmed status: %s",
-                license_key, ack_status,
+                license_key,
+                ack_status,
             )
             return
 
@@ -214,6 +208,7 @@ class MQTTManager:
                 # Update Redis live relay state
                 if redis_client:
                     import json as _json
+
                     key = f"live:relay:{device.device_id}"
                     raw = await redis_client.get(key)
                     relay_states = _json.loads(raw) if raw else {}
@@ -243,12 +238,13 @@ class MQTTManager:
 
                 logger.info(
                     "Relay ACK: device %s (%s) confirmed %s -> %s",
-                    device.device_id, license_key, relay_type, state,
+                    device.device_id,
+                    license_key,
+                    relay_type,
+                    state,
                 )
         except Exception as e:
-            logger.error(
-                "Error handling relay ACK from %s: %s", license_key, e
-            )
+            logger.error("Error handling relay ACK from %s: %s", license_key, e)
 
     async def publish_control(self, license_key: str, action: str):
         """Publish control command (kill-switch) to a device."""
@@ -258,9 +254,7 @@ class MQTTManager:
             await self._client.publish(topic, payload)
             logger.info("Published %s to %s", action, topic)
         else:
-            logger.warning(
-                "MQTT not connected -- cannot publish to %s", license_key
-            )
+            logger.warning("MQTT not connected -- cannot publish to %s", license_key)
 
     async def publish_relay_command(
         self, license_key: str, relay_type: str, state: str
@@ -268,14 +262,10 @@ class MQTTManager:
         """Publish relay command to a device via MQTT."""
         if self._client:
             topic = f"device/{license_key}/commands"
-            payload = json.dumps(
-                {"relay_type": relay_type, "state": state}
-            )
+            payload = json.dumps({"relay_type": relay_type, "state": state})
             await self._client.publish(topic, payload)
 
-    async def publish_config_update(
-        self, license_key: str, thresholds: dict
-    ):
+    async def publish_config_update(self, license_key: str, thresholds: dict):
         """Publish threshold config update to a device via MQTT.
 
         The firmware subscribes to device/{licenseKey}/config and updates
@@ -285,13 +275,12 @@ class MQTTManager:
             topic = f"device/{license_key}/config"
             payload = json.dumps(thresholds)
             await self._client.publish(topic, payload)
-            logger.info(
-                "Published config update to %s: %s", topic, thresholds
-            )
+            logger.info("Published config update to %s: %s", topic, thresholds)
         else:
             logger.warning(
                 "MQTT not connected -- cannot publish config to %s",
                 license_key,
             )
+
 
 mqtt_manager = MQTTManager()

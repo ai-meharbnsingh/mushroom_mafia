@@ -85,7 +85,9 @@ def _compute_deviation(
     if guideline_min is not None and current_min is not None:
         if current_min < guideline_min:
             diff = abs(float(guideline_min - current_min))
-            threshold_val = float(guideline_min) * 0.20 if float(guideline_min) != 0 else 5.0
+            threshold_val = (
+                float(guideline_min) * 0.20 if float(guideline_min) != 0 else 5.0
+            )
             severity = "critical" if diff > threshold_val else "warning"
             return ClimateDeviationItem(
                 parameter=parameter,
@@ -99,7 +101,9 @@ def _compute_deviation(
     if guideline_max is not None and current_max is not None:
         if current_max > guideline_max:
             diff = abs(float(current_max - guideline_max))
-            threshold_val = float(guideline_max) * 0.20 if float(guideline_max) != 0 else 5.0
+            threshold_val = (
+                float(guideline_max) * 0.20 if float(guideline_max) != 0 else 5.0
+            )
             severity = "critical" if diff > threshold_val else "warning"
             return ClimateDeviationItem(
                 parameter=parameter,
@@ -208,7 +212,11 @@ async def get_advisory_for_room(
         if days_in_stage >= guideline.duration_days_min:
             next_stage = _get_next_stage(cycle.current_stage)
             next_name = next_stage.value if next_stage else "completion"
-            duration_range = f"{guideline.duration_days_min}-{guideline.duration_days_max}" if guideline.duration_days_max else str(guideline.duration_days_min)
+            duration_range = (
+                f"{guideline.duration_days_min}-{guideline.duration_days_max}"
+                if guideline.duration_days_max
+                else str(guideline.duration_days_min)
+            )
             transition_reminder = (
                 f"{cycle.current_stage.value} phase ending soon "
                 f"(Day {days_in_stage} of {duration_range} days). "
@@ -277,9 +285,7 @@ async def get_advisory_for_room(
                     f"CO2 {next_stage_preview.co2_min}-{next_stage_preview.co2_max} ppm."
                 )
             else:
-                suggestions.append(
-                    f"Consider advancing to {next_stage.value}."
-                )
+                suggestions.append(f"Consider advancing to {next_stage.value}.")
     else:
         suggestions.append(
             f"No climate guideline found for {plant_type.value} at "
@@ -303,7 +309,9 @@ async def get_advisory_for_room(
         transition_reminder=transition_reminder,
         next_stage=next_stage.value if next_stage else None,
         next_stage_preview=next_stage_preview,
-        auto_adjust_enabled=cycle.auto_adjust_thresholds if cycle.auto_adjust_thresholds is not None else True,
+        auto_adjust_enabled=cycle.auto_adjust_thresholds
+        if cycle.auto_adjust_thresholds is not None
+        else True,
         suggestions=suggestions,
     )
 
@@ -370,9 +378,7 @@ async def _publish_thresholds_to_devices(
     Reuses the same pattern from thresholds.py router.
     """
     room_with_devices = await db.execute(
-        select(Room)
-        .options(selectinload(Room.devices))
-        .where(Room.room_id == room_id)
+        select(Room).options(selectinload(Room.devices)).where(Room.room_id == room_id)
     )
     room_obj = room_with_devices.scalar_one_or_none()
     if not room_obj or not room_obj.devices:
@@ -394,9 +400,7 @@ async def _publish_thresholds_to_devices(
 
     for device in room_obj.devices:
         if device.is_online and device.license_key:
-            await mqtt_manager.publish_config_update(
-                device.license_key, config_payload
-            )
+            await mqtt_manager.publish_config_update(device.license_key, config_payload)
 
     logger.info(
         "Threshold config synced to %d device(s) in room %d after stage advance",
@@ -429,7 +433,9 @@ async def on_stage_advanced(
 
         # Get room -> plant -> plant_type
         room_result = await db.execute(
-            select(Room).options(selectinload(Room.plant)).where(Room.room_id == room_id)
+            select(Room)
+            .options(selectinload(Room.plant))
+            .where(Room.room_id == room_id)
         )
         room = room_result.scalar_one_or_none()
         if not room or not room.plant:
@@ -487,6 +493,4 @@ async def on_stage_advanced(
             logger.error("Failed to broadcast stage_advanced WebSocket event: %s", e)
 
     except Exception as e:
-        logger.error(
-            "Error in on_stage_advanced for room %d: %s", room_id, e
-        )
+        logger.error("Error in on_stage_advanced for room %d: %s", room_id, e)

@@ -1,5 +1,12 @@
 from sqlalchemy import (
-    Column, Integer, Numeric, Text, Boolean, DateTime, Enum, UniqueConstraint,
+    Column,
+    Integer,
+    Numeric,
+    Text,
+    Boolean,
+    DateTime,
+    Enum,
+    UniqueConstraint,
 )
 from sqlalchemy.sql import func
 

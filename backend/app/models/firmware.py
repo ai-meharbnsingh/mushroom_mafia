@@ -1,5 +1,11 @@
 from sqlalchemy import (
-    Column, Integer, String, Boolean, DateTime, Text, ForeignKey,
+    Column,
+    Integer,
+    String,
+    Boolean,
+    DateTime,
+    Text,
+    ForeignKey,
 )
 from sqlalchemy.sql import func
 

@@ -1,5 +1,13 @@
 from sqlalchemy import (
-    Column, Integer, BigInteger, String, DateTime, JSON, Enum, ForeignKey, Index,
+    Column,
+    Integer,
+    BigInteger,
+    String,
+    DateTime,
+    JSON,
+    Enum,
+    ForeignKey,
+    Index,
 )
 from sqlalchemy.sql import func
 

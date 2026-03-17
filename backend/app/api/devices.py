@@ -37,11 +37,13 @@ from app.services.audit_service import write_audit_log
 router = APIRouter()
 
 
-@router.get("/pending", response_model=list[DeviceResponse], summary="List devices with PENDING status")
+@router.get(
+    "/pending",
+    response_model=list[DeviceResponse],
+    summary="List devices with PENDING status",
+)
 async def list_pending_devices(
-    current_user: User = Depends(
-        require_roles(UserRole.SUPER_ADMIN, UserRole.ADMIN)
-    ),
+    current_user: User = Depends(require_roles(UserRole.SUPER_ADMIN, UserRole.ADMIN)),
     db: AsyncSession = Depends(get_db),
 ):
     """List devices with subscription_status=PENDING."""
@@ -54,7 +56,11 @@ async def list_pending_devices(
     return result.scalars().all()
 
 
-@router.get("/", response_model=list[DeviceResponse], summary="List all devices for the current user")
+@router.get(
+    "/",
+    response_model=list[DeviceResponse],
+    summary="List all devices for the current user",
+)
 async def list_devices(
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
@@ -117,9 +123,7 @@ async def get_device(
 ):
     """Get device by ID."""
     result = await db.execute(
-        select(Device).where(
-            Device.device_id == device_id, Device.is_active == True
-        )
+        select(Device).where(Device.device_id == device_id, Device.is_active == True)
     )
     device = result.scalar_one_or_none()
     if not device:
@@ -145,7 +149,11 @@ async def get_device(
     return device
 
 
-@router.put("/{device_id}", response_model=DeviceResponse, summary="Update device details or assign to a room")
+@router.put(
+    "/{device_id}",
+    response_model=DeviceResponse,
+    summary="Update device details or assign to a room",
+)
 async def update_device(
     device_id: int,
     device_in: DeviceUpdate,
@@ -156,9 +164,7 @@ async def update_device(
 ):
     """Update device (assign room, rename). ADMIN/MANAGER."""
     result = await db.execute(
-        select(Device).where(
-            Device.device_id == device_id, Device.is_active == True
-        )
+        select(Device).where(Device.device_id == device_id, Device.is_active == True)
     )
     device = result.scalar_one_or_none()
     if not device:
@@ -189,20 +195,18 @@ async def update_device(
     return device
 
 
-@router.delete("/{device_id}", status_code=status.HTTP_200_OK, summary="Deactivate a device")
+@router.delete(
+    "/{device_id}", status_code=status.HTTP_200_OK, summary="Deactivate a device"
+)
 async def delete_device(
     device_id: int,
     request: Request,
-    current_user: User = Depends(
-        require_roles(UserRole.ADMIN, UserRole.SUPER_ADMIN)
-    ),
+    current_user: User = Depends(require_roles(UserRole.ADMIN, UserRole.SUPER_ADMIN)),
     db: AsyncSession = Depends(get_db),
 ):
     """Delete device. ADMIN+ only."""
     result = await db.execute(
-        select(Device).where(
-            Device.device_id == device_id, Device.is_active == True
-        )
+        select(Device).where(Device.device_id == device_id, Device.is_active == True)
     )
     device = result.scalar_one_or_none()
     if not device:
@@ -211,17 +215,26 @@ async def delete_device(
         )
     device.is_active = False
     await write_audit_log(
-        db, AuditAction.DELETE,
-        user_id=current_user.user_id, table_name="devices",
+        db,
+        AuditAction.DELETE,
+        user_id=current_user.user_id,
+        table_name="devices",
         record_id=device_id,
-        old_value={"device_name": device.device_name, "license_key": device.license_key},
+        old_value={
+            "device_name": device.device_name,
+            "license_key": device.license_key,
+        },
         request=request,
     )
     await db.commit()
     return {"detail": "Device deactivated"}
 
 
-@router.post("/provision", response_model=DeviceProvisionResponse, summary="Provision a new device and generate license key")
+@router.post(
+    "/provision",
+    response_model=DeviceProvisionResponse,
+    summary="Provision a new device and generate license key",
+)
 async def provision_device(
     provision_in: DeviceProvision,
     request: Request,
@@ -246,10 +259,16 @@ async def provision_device(
     await db.refresh(device)
 
     await write_audit_log(
-        db, AuditAction.CREATE,
-        user_id=current_user.user_id, table_name="devices",
+        db,
+        AuditAction.CREATE,
+        user_id=current_user.user_id,
+        table_name="devices",
         record_id=device.device_id,
-        new_value={"device_name": device.device_name, "mac_address": device.mac_address, "license_key": license_key},
+        new_value={
+            "device_name": device.device_name,
+            "mac_address": device.mac_address,
+            "license_key": license_key,
+        },
         request=request,
     )
     await db.commit()
@@ -262,7 +281,11 @@ async def provision_device(
     )
 
 
-@router.post("/{device_id}/assign", response_model=DeviceAssignResponse, summary="Assign a device to a plant")
+@router.post(
+    "/{device_id}/assign",
+    response_model=DeviceAssignResponse,
+    summary="Assign a device to a plant",
+)
 async def assign_device(
     device_id: int,
     assign_in: DeviceAssignRequest,
@@ -272,9 +295,7 @@ async def assign_device(
     """Assign a device to a plant (ADMIN+ only).
     Generates a device password, encrypts it, sets status to ACTIVE."""
     result = await db.execute(
-        select(Device).where(
-            Device.device_id == device_id, Device.is_active == True
-        )
+        select(Device).where(Device.device_id == device_id, Device.is_active == True)
     )
     device = result.scalar_one_or_none()
     if not device:
@@ -294,6 +315,7 @@ async def assign_device(
 
     # Use the HiveMQ broker password so the device can authenticate
     from app.config import settings
+
     plain_password = settings.MQTT_PASSWORD
     encrypted_password = encrypt_device_password(plain_password)
 
@@ -324,9 +346,7 @@ async def kill_switch(
     DISABLE = suspend device, ENABLE = reactivate device.
     Publishes control command via MQTT."""
     result = await db.execute(
-        select(Device).where(
-            Device.device_id == device_id, Device.is_active == True
-        )
+        select(Device).where(Device.device_id == device_id, Device.is_active == True)
     )
     device = result.scalar_one_or_none()
     if not device:
@@ -348,11 +368,16 @@ async def kill_switch(
         device.subscription_status = SubscriptionStatus.ACTIVE
 
     await write_audit_log(
-        db, AuditAction.CONFIG_CHANGE,
-        user_id=current_user.user_id, table_name="devices",
+        db,
+        AuditAction.CONFIG_CHANGE,
+        user_id=current_user.user_id,
+        table_name="devices",
         record_id=device_id,
         old_value={"subscription_status": old_status},
-        new_value={"subscription_status": device.subscription_status.value, "action": action},
+        new_value={
+            "subscription_status": device.subscription_status.value,
+            "action": action,
+        },
         request=request,
     )
     await db.commit()
@@ -377,9 +402,7 @@ async def revoke_device(
     """Revoke a device permanently (ADMIN+ only).
     Sets subscription to EXPIRED, deactivates device, publishes DISABLE via MQTT."""
     result = await db.execute(
-        select(Device).where(
-            Device.device_id == device_id, Device.is_active == True
-        )
+        select(Device).where(Device.device_id == device_id, Device.is_active == True)
     )
     device = result.scalar_one_or_none()
     if not device:
@@ -406,12 +429,14 @@ async def revoke_device(
 # --- Device Onboarding (QR Scan / Link / Approve / QR Image) ---
 
 
-@router.post("/link", response_model=DeviceLinkResponse, summary="Link a device to a room via QR scan")
+@router.post(
+    "/link",
+    response_model=DeviceLinkResponse,
+    summary="Link a device to a room via QR scan",
+)
 async def link_device(
     link_in: DeviceLinkRequest,
-    current_user: User = Depends(
-        require_roles(UserRole.SUPER_ADMIN, UserRole.ADMIN)
-    ),
+    current_user: User = Depends(require_roles(UserRole.SUPER_ADMIN, UserRole.ADMIN)),
     db: AsyncSession = Depends(get_db),
 ):
     """Link a device to a room via QR scan (ADMIN+ only).
@@ -497,11 +522,13 @@ async def link_device(
     )
 
 
-@router.get("/pending-approval", response_model=list[PendingApprovalResponse], summary="List devices awaiting approval")
+@router.get(
+    "/pending-approval",
+    response_model=list[PendingApprovalResponse],
+    summary="List devices awaiting approval",
+)
 async def list_pending_approval_devices(
-    current_user: User = Depends(
-        require_roles(UserRole.SUPER_ADMIN)
-    ),
+    current_user: User = Depends(require_roles(UserRole.SUPER_ADMIN)),
     db: AsyncSession = Depends(get_db),
 ):
     """List devices with subscription_status=PENDING_APPROVAL (SUPER_ADMIN only)."""
@@ -545,9 +572,7 @@ async def approve_device(
     device_id: int,
     approve_in: DeviceApproveRequest,
     request: Request,
-    current_user: User = Depends(
-        require_roles(UserRole.SUPER_ADMIN)
-    ),
+    current_user: User = Depends(require_roles(UserRole.SUPER_ADMIN)),
     db: AsyncSession = Depends(get_db),
 ):
     """Approve or reject a device that is pending approval (SUPER_ADMIN only).
@@ -556,9 +581,7 @@ async def approve_device(
     REJECT: Revert status to PENDING, clear room assignment and link info.
     """
     result = await db.execute(
-        select(Device).where(
-            Device.device_id == device_id, Device.is_active == True
-        )
+        select(Device).where(Device.device_id == device_id, Device.is_active == True)
     )
     device = result.scalar_one_or_none()
     if not device:
@@ -582,13 +605,16 @@ async def approve_device(
     if action == "APPROVE":
         # Use the HiveMQ broker password so the device can authenticate
         from app.config import settings
+
         plain_password = settings.MQTT_PASSWORD
         encrypted_password = encrypt_device_password(plain_password)
         device.device_password = encrypted_password
         device.subscription_status = SubscriptionStatus.ACTIVE
         await write_audit_log(
-            db, AuditAction.CONFIG_CHANGE,
-            user_id=current_user.user_id, table_name="devices",
+            db,
+            AuditAction.CONFIG_CHANGE,
+            user_id=current_user.user_id,
+            table_name="devices",
             record_id=device_id,
             old_value={"subscription_status": "PENDING_APPROVAL"},
             new_value={"subscription_status": "ACTIVE", "action": "APPROVE"},
@@ -608,8 +634,10 @@ async def approve_device(
         device.linked_by_user_id = None
         device.linked_at = None
         await write_audit_log(
-            db, AuditAction.CONFIG_CHANGE,
-            user_id=current_user.user_id, table_name="devices",
+            db,
+            AuditAction.CONFIG_CHANGE,
+            user_id=current_user.user_id,
+            table_name="devices",
             record_id=device_id,
             old_value={"subscription_status": "PENDING_APPROVAL"},
             new_value={"subscription_status": "PENDING", "action": "REJECT"},
@@ -628,16 +656,12 @@ async def approve_device(
 async def upload_qr_image(
     device_id: int,
     qr_in: QrImageUpload,
-    current_user: User = Depends(
-        require_roles(UserRole.SUPER_ADMIN, UserRole.ADMIN)
-    ),
+    current_user: User = Depends(require_roles(UserRole.SUPER_ADMIN, UserRole.ADMIN)),
     db: AsyncSession = Depends(get_db),
 ):
     """Upload a QR code image (base64) for a device (ADMIN+ only)."""
     result = await db.execute(
-        select(Device).where(
-            Device.device_id == device_id, Device.is_active == True
-        )
+        select(Device).where(Device.device_id == device_id, Device.is_active == True)
     )
     device = result.scalar_one_or_none()
     if not device:
@@ -651,7 +675,11 @@ async def upload_qr_image(
     return {"detail": "QR code image saved successfully"}
 
 
-@router.get("/{device_id}/qr-image", response_model=QrImageResponse, summary="Get the stored QR code image for a device")
+@router.get(
+    "/{device_id}/qr-image",
+    response_model=QrImageResponse,
+    summary="Get the stored QR code image for a device",
+)
 async def get_qr_image(
     device_id: int,
     current_user: User = Depends(get_current_user),
@@ -659,9 +687,7 @@ async def get_qr_image(
 ):
     """Get the stored QR code image for a device."""
     result = await db.execute(
-        select(Device).where(
-            Device.device_id == device_id, Device.is_active == True
-        )
+        select(Device).where(Device.device_id == device_id, Device.is_active == True)
     )
     device = result.scalar_one_or_none()
     if not device:

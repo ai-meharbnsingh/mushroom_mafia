@@ -23,9 +23,11 @@ _memory_rate_limits: dict[tuple[str, str], list[float]] = defaultdict(list)
 
 def safe_rate_limit(times: int = 5, seconds: int = 60):
     """Rate limiter with in-memory fallback when Redis is unavailable."""
+
     async def _dependency(request: Request):
         try:
             from fastapi_limiter.depends import RateLimiter
+
             limiter = RateLimiter(times=times, seconds=seconds)
             await limiter(request)
         except HTTPException:
@@ -40,13 +42,16 @@ def safe_rate_limit(times: int = 5, seconds: int = 60):
                 t for t in _memory_rate_limits[key] if now - t < seconds
             ]
             if len(_memory_rate_limits[key]) >= times:
-                logger.warning("In-memory rate limit hit for %s on %s", client_ip, request.url.path)
+                logger.warning(
+                    "In-memory rate limit hit for %s on %s", client_ip, request.url.path
+                )
                 raise HTTPException(
                     status_code=status.HTTP_429_TOO_MANY_REQUESTS,
                     detail="Too many requests",
                 )
             _memory_rate_limits[key].append(now)
             logger.debug("Rate limiter using in-memory fallback (Redis unavailable)")
+
     return _dependency
 
 
@@ -74,11 +79,13 @@ async def get_current_user(
         if not csrf_cookie or not csrf_header or csrf_cookie != csrf_header:
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
-                detail="CSRF token missing or invalid"
+                detail="CSRF token missing or invalid",
             )
 
     if not token:
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Not authenticated")
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED, detail="Not authenticated"
+        )
     try:
         payload = decode_token(token)
         user_id = payload.get("sub")

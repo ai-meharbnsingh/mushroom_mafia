@@ -60,9 +60,7 @@ async def emqx_authenticate(
 
 
 @router.post("/acl")
-async def emqx_authorize(
-    request: EmqxAclRequest, db: AsyncSession = Depends(get_db)
-):
+async def emqx_authorize(request: EmqxAclRequest, db: AsyncSession = Depends(get_db)):
     """EMQX calls this for topic-level ACL.
     Devices can only pub/sub to their own license_key topics."""
     from app.config import settings

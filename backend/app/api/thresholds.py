@@ -42,9 +42,7 @@ async def get_room_thresholds(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Room not found",
         )
-    result = await db.execute(
-        select(Threshold).where(Threshold.room_id == room_id)
-    )
+    result = await db.execute(select(Threshold).where(Threshold.room_id == room_id))
     return result.scalars().all()
 
 
@@ -88,7 +86,9 @@ async def update_room_thresholds(
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail=f"Threshold for parameter '{threshold_update.parameter}' not found in room {room_id}",
             )
-        update_data = threshold_update.model_dump(exclude_unset=True, exclude={"parameter"})
+        update_data = threshold_update.model_dump(
+            exclude_unset=True, exclude={"parameter"}
+        )
         for field, value in update_data.items():
             setattr(threshold, field, value)
         threshold.updated_by = current_user.user_id

@@ -68,6 +68,7 @@ async def generate_report(
 # Daily Summary
 # ---------------------------------------------------------------------------
 
+
 async def _daily_summary(
     db: AsyncSession,
     room_ids: list[int],
@@ -78,11 +79,21 @@ async def _daily_summary(
     """Sensor averages / min / max per room per day."""
     if not room_ids:
         return _empty_csv(
-            ["date", "room_id", "room_name",
-             "avg_co2", "min_co2", "max_co2",
-             "avg_temp", "min_temp", "max_temp",
-             "avg_humidity", "min_humidity", "max_humidity",
-             "reading_count"]
+            [
+                "date",
+                "room_id",
+                "room_name",
+                "avg_co2",
+                "min_co2",
+                "max_co2",
+                "avg_temp",
+                "min_temp",
+                "max_temp",
+                "avg_humidity",
+                "min_humidity",
+                "max_humidity",
+                "reading_count",
+            ]
         )
 
     day_col = cast(RoomReading.recorded_at, Date).label("day")
@@ -114,29 +125,48 @@ async def _daily_summary(
 
     buf = io.StringIO()
     writer = csv.writer(buf)
-    writer.writerow([
-        "date", "room_id", "room_name",
-        "avg_co2", "min_co2", "max_co2",
-        "avg_temp", "min_temp", "max_temp",
-        "avg_humidity", "min_humidity", "max_humidity",
-        "reading_count",
-    ])
+    writer.writerow(
+        [
+            "date",
+            "room_id",
+            "room_name",
+            "avg_co2",
+            "min_co2",
+            "max_co2",
+            "avg_temp",
+            "min_temp",
+            "max_temp",
+            "avg_humidity",
+            "min_humidity",
+            "max_humidity",
+            "reading_count",
+        ]
+    )
     for row in rows:
-        writer.writerow([
-            str(row.day),
-            row.room_id,
-            room_name_map.get(row.room_id, ""),
-            row.avg_co2, row.min_co2, row.max_co2,
-            row.avg_temp, row.min_temp, row.max_temp,
-            row.avg_humidity, row.min_humidity, row.max_humidity,
-            row.reading_count,
-        ])
+        writer.writerow(
+            [
+                str(row.day),
+                row.room_id,
+                room_name_map.get(row.room_id, ""),
+                row.avg_co2,
+                row.min_co2,
+                row.max_co2,
+                row.avg_temp,
+                row.min_temp,
+                row.max_temp,
+                row.avg_humidity,
+                row.min_humidity,
+                row.max_humidity,
+                row.reading_count,
+            ]
+        )
     return buf.getvalue()
 
 
 # ---------------------------------------------------------------------------
 # Weekly Summary
 # ---------------------------------------------------------------------------
+
 
 async def _weekly_summary(
     db: AsyncSession,
@@ -148,11 +178,22 @@ async def _weekly_summary(
     """Sensor averages / min / max per room per ISO week."""
     if not room_ids:
         return _empty_csv(
-            ["year", "week", "room_id", "room_name",
-             "avg_co2", "min_co2", "max_co2",
-             "avg_temp", "min_temp", "max_temp",
-             "avg_humidity", "min_humidity", "max_humidity",
-             "reading_count"]
+            [
+                "year",
+                "week",
+                "room_id",
+                "room_name",
+                "avg_co2",
+                "min_co2",
+                "max_co2",
+                "avg_temp",
+                "min_temp",
+                "max_temp",
+                "avg_humidity",
+                "min_humidity",
+                "max_humidity",
+                "reading_count",
+            ]
         )
 
     year_col = func.extract("isoyear", RoomReading.recorded_at).label("year")
@@ -186,29 +227,50 @@ async def _weekly_summary(
 
     buf = io.StringIO()
     writer = csv.writer(buf)
-    writer.writerow([
-        "year", "week", "room_id", "room_name",
-        "avg_co2", "min_co2", "max_co2",
-        "avg_temp", "min_temp", "max_temp",
-        "avg_humidity", "min_humidity", "max_humidity",
-        "reading_count",
-    ])
+    writer.writerow(
+        [
+            "year",
+            "week",
+            "room_id",
+            "room_name",
+            "avg_co2",
+            "min_co2",
+            "max_co2",
+            "avg_temp",
+            "min_temp",
+            "max_temp",
+            "avg_humidity",
+            "min_humidity",
+            "max_humidity",
+            "reading_count",
+        ]
+    )
     for row in rows:
-        writer.writerow([
-            int(row.year), int(row.week),
-            row.room_id,
-            room_name_map.get(row.room_id, ""),
-            row.avg_co2, row.min_co2, row.max_co2,
-            row.avg_temp, row.min_temp, row.max_temp,
-            row.avg_humidity, row.min_humidity, row.max_humidity,
-            row.reading_count,
-        ])
+        writer.writerow(
+            [
+                int(row.year),
+                int(row.week),
+                row.room_id,
+                room_name_map.get(row.room_id, ""),
+                row.avg_co2,
+                row.min_co2,
+                row.max_co2,
+                row.avg_temp,
+                row.min_temp,
+                row.max_temp,
+                row.avg_humidity,
+                row.min_humidity,
+                row.max_humidity,
+                row.reading_count,
+            ]
+        )
     return buf.getvalue()
 
 
 # ---------------------------------------------------------------------------
 # Alert Report
 # ---------------------------------------------------------------------------
+
 
 async def _alert_report(
     db: AsyncSession,
@@ -220,9 +282,20 @@ async def _alert_report(
     """All alerts in the date range with severity, room, timestamps."""
     if not room_ids:
         return _empty_csv(
-            ["alert_id", "room_id", "room_name", "alert_type", "severity",
-             "parameter", "current_value", "threshold_value", "message",
-             "is_resolved", "created_at", "resolved_at"]
+            [
+                "alert_id",
+                "room_id",
+                "room_name",
+                "alert_type",
+                "severity",
+                "parameter",
+                "current_value",
+                "threshold_value",
+                "message",
+                "is_resolved",
+                "created_at",
+                "resolved_at",
+            ]
         )
 
     result = await db.execute(
@@ -238,32 +311,46 @@ async def _alert_report(
 
     buf = io.StringIO()
     writer = csv.writer(buf)
-    writer.writerow([
-        "alert_id", "room_id", "room_name", "alert_type", "severity",
-        "parameter", "current_value", "threshold_value", "message",
-        "is_resolved", "created_at", "resolved_at",
-    ])
+    writer.writerow(
+        [
+            "alert_id",
+            "room_id",
+            "room_name",
+            "alert_type",
+            "severity",
+            "parameter",
+            "current_value",
+            "threshold_value",
+            "message",
+            "is_resolved",
+            "created_at",
+            "resolved_at",
+        ]
+    )
     for a in alerts:
-        writer.writerow([
-            a.alert_id,
-            a.room_id,
-            room_name_map.get(a.room_id, ""),
-            a.alert_type.value if a.alert_type else "",
-            a.severity.value if a.severity else "",
-            a.parameter or "",
-            a.current_value,
-            a.threshold_value,
-            a.message or "",
-            a.is_resolved,
-            str(a.created_at) if a.created_at else "",
-            str(a.resolved_at) if a.resolved_at else "",
-        ])
+        writer.writerow(
+            [
+                a.alert_id,
+                a.room_id,
+                room_name_map.get(a.room_id, ""),
+                a.alert_type.value if a.alert_type else "",
+                a.severity.value if a.severity else "",
+                a.parameter or "",
+                a.current_value,
+                a.threshold_value,
+                a.message or "",
+                a.is_resolved,
+                str(a.created_at) if a.created_at else "",
+                str(a.resolved_at) if a.resolved_at else "",
+            ]
+        )
     return buf.getvalue()
 
 
 # ---------------------------------------------------------------------------
 # Harvest Report
 # ---------------------------------------------------------------------------
+
 
 async def _harvest_report(
     db: AsyncSession,
@@ -275,8 +362,16 @@ async def _harvest_report(
     """Harvest records with weights, grades, room names."""
     if not room_ids:
         return _empty_csv(
-            ["harvest_id", "room_id", "room_name", "harvested_at",
-             "weight_kg", "grade", "notes", "created_at"]
+            [
+                "harvest_id",
+                "room_id",
+                "room_name",
+                "harvested_at",
+                "weight_kg",
+                "grade",
+                "notes",
+                "created_at",
+            ]
         )
 
     result = await db.execute(
@@ -292,27 +387,38 @@ async def _harvest_report(
 
     buf = io.StringIO()
     writer = csv.writer(buf)
-    writer.writerow([
-        "harvest_id", "room_id", "room_name", "harvested_at",
-        "weight_kg", "grade", "notes", "created_at",
-    ])
+    writer.writerow(
+        [
+            "harvest_id",
+            "room_id",
+            "room_name",
+            "harvested_at",
+            "weight_kg",
+            "grade",
+            "notes",
+            "created_at",
+        ]
+    )
     for h in harvests:
-        writer.writerow([
-            h.harvest_id,
-            h.room_id,
-            room_name_map.get(h.room_id, ""),
-            str(h.harvested_at) if h.harvested_at else "",
-            h.weight_kg,
-            h.grade.value if h.grade else "",
-            h.notes or "",
-            str(h.created_at) if h.created_at else "",
-        ])
+        writer.writerow(
+            [
+                h.harvest_id,
+                h.room_id,
+                room_name_map.get(h.room_id, ""),
+                str(h.harvested_at) if h.harvested_at else "",
+                h.weight_kg,
+                h.grade.value if h.grade else "",
+                h.notes or "",
+                str(h.created_at) if h.created_at else "",
+            ]
+        )
     return buf.getvalue()
 
 
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
+
 
 def _empty_csv(headers: list[str]) -> str:
     """Return a CSV string with only headers (no data rows)."""
@@ -335,10 +441,22 @@ async def stream_readings_csv(
              outdoor_humidity, bag_temp_1..bag_temp_10
     """
     headers = [
-        "timestamp", "co2_ppm", "room_temp", "room_humidity",
-        "outdoor_temp", "outdoor_humidity",
-        "bag_temp_1", "bag_temp_2", "bag_temp_3", "bag_temp_4", "bag_temp_5",
-        "bag_temp_6", "bag_temp_7", "bag_temp_8", "bag_temp_9", "bag_temp_10",
+        "timestamp",
+        "co2_ppm",
+        "room_temp",
+        "room_humidity",
+        "outdoor_temp",
+        "outdoor_humidity",
+        "bag_temp_1",
+        "bag_temp_2",
+        "bag_temp_3",
+        "bag_temp_4",
+        "bag_temp_5",
+        "bag_temp_6",
+        "bag_temp_7",
+        "bag_temp_8",
+        "bag_temp_9",
+        "bag_temp_10",
     ]
 
     buf = io.StringIO()
@@ -361,14 +479,24 @@ async def stream_readings_csv(
     for r in readings:
         buf = io.StringIO()
         writer = csv.writer(buf)
-        writer.writerow([
-            str(r.recorded_at),
-            r.co2_ppm,
-            r.room_temp,
-            r.room_humidity,
-            r.outdoor_temp,
-            r.outdoor_humidity,
-            r.bag_temp_1, r.bag_temp_2, r.bag_temp_3, r.bag_temp_4, r.bag_temp_5,
-            r.bag_temp_6, r.bag_temp_7, r.bag_temp_8, r.bag_temp_9, r.bag_temp_10,
-        ])
+        writer.writerow(
+            [
+                str(r.recorded_at),
+                r.co2_ppm,
+                r.room_temp,
+                r.room_humidity,
+                r.outdoor_temp,
+                r.outdoor_humidity,
+                r.bag_temp_1,
+                r.bag_temp_2,
+                r.bag_temp_3,
+                r.bag_temp_4,
+                r.bag_temp_5,
+                r.bag_temp_6,
+                r.bag_temp_7,
+                r.bag_temp_8,
+                r.bag_temp_9,
+                r.bag_temp_10,
+            ]
+        )
         yield buf.getvalue()

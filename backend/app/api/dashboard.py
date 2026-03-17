@@ -15,7 +15,13 @@ from app.models.device import Device
 from app.models.alert import Alert
 from app.models.harvest import Harvest
 from app.models.growth_cycle import GrowthCycle
-from app.models.enums import Severity, UserRole, SubscriptionStatus, RoomType, HarvestGrade
+from app.models.enums import (
+    Severity,
+    UserRole,
+    SubscriptionStatus,
+    RoomType,
+    HarvestGrade,
+)
 from app.schemas.dashboard import (
     DashboardSummary,
     AdminDashboardSummary,
@@ -33,22 +39,28 @@ from app.api.deps import get_current_user, require_roles
 router = APIRouter()
 
 
-@router.get("/summary", response_model=DashboardSummary, summary="Get dashboard summary counts")
+@router.get(
+    "/summary", response_model=DashboardSummary, summary="Get dashboard summary counts"
+)
 async def get_dashboard_summary(
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
     """Return dashboard summary counts filtered by the current user's owner_id and assigned plants."""
     owner_id = current_user.owner_id
-    
+
     plant_condition = Plant.owner_id == owner_id
     is_admin = current_user.role in [UserRole.SUPER_ADMIN, UserRole.ADMIN]
     if not is_admin:
         if not current_user.assigned_plants:
             # If no assigned plants and not an admin, everything is 0
             return DashboardSummary(
-                total_plants=0, total_rooms=0, total_devices=0,
-                active_devices=0, active_alerts=0, critical_alerts=0
+                total_plants=0,
+                total_rooms=0,
+                total_devices=0,
+                active_devices=0,
+                active_alerts=0,
+                critical_alerts=0,
             )
         assigned_ids = [int(pid) for pid in current_user.assigned_plants]
         plant_condition = Plant.plant_id.in_(assigned_ids)
@@ -159,11 +171,13 @@ async def get_current_readings(
     return {"readings": readings}
 
 
-@router.get("/admin-summary", response_model=AdminDashboardSummary, summary="Get comprehensive admin dashboard data")
+@router.get(
+    "/admin-summary",
+    response_model=AdminDashboardSummary,
+    summary="Get comprehensive admin dashboard data",
+)
 async def get_admin_dashboard(
-    current_user: User = Depends(
-        require_roles(UserRole.ADMIN, UserRole.SUPER_ADMIN)
-    ),
+    current_user: User = Depends(require_roles(UserRole.ADMIN, UserRole.SUPER_ADMIN)),
     db: AsyncSession = Depends(get_db),
 ):
     """Return comprehensive admin dashboard data filtered by owner_id."""
@@ -213,8 +227,7 @@ async def get_admin_dashboard(
     # --- Device status breakdown ---
     # Build a subquery for owner's devices
     owner_device_ids = (
-        select(Device.device_id)
-        .where(
+        select(Device.device_id).where(
             Device.is_active == True,
             or_(
                 Device.assigned_to_plant_id.in_(
@@ -285,9 +298,7 @@ async def get_admin_dashboard(
     )
 
     # --- Alert summary ---
-    today_start = utcnow_naive().replace(
-        hour=0, minute=0, second=0, microsecond=0
-    )
+    today_start = utcnow_naive().replace(hour=0, minute=0, second=0, microsecond=0)
 
     alert_active_q = await db.execute(
         select(func.count(Alert.alert_id))
@@ -385,7 +396,13 @@ async def get_admin_dashboard(
         )
         for row in ph_q.all():
             y, c, a, b, cc = float(row[1]), row[2], row[3], row[4], row[5]
-            plant_harvest_stats[row[0]] = {"yield_kg": y, "count": c, "a": a, "b": b, "c": cc}
+            plant_harvest_stats[row[0]] = {
+                "yield_kg": y,
+                "count": c,
+                "a": a,
+                "b": b,
+                "c": cc,
+            }
             overall_yield += y
             overall_harvests += c
             overall_grade_a += a
@@ -447,7 +464,13 @@ async def get_admin_dashboard(
 
     # --- Recent device events ---
     recent_q = await db.execute(
-        select(Device.device_id, Device.device_name, Device.registered_at, Device.last_seen, Device.is_online)
+        select(
+            Device.device_id,
+            Device.device_name,
+            Device.registered_at,
+            Device.last_seen,
+            Device.is_online,
+        )
         .where(Device.device_id.in_(owner_device_ids))
         .order_by(func.coalesce(Device.last_seen, Device.registered_at).desc())
         .limit(10)
@@ -489,7 +512,11 @@ async def get_admin_dashboard(
     )
 
 
-@router.get("/plant/{plant_id}", response_model=PlantDashboardSummary, summary="Get plant-specific dashboard data")
+@router.get(
+    "/plant/{plant_id}",
+    response_model=PlantDashboardSummary,
+    summary="Get plant-specific dashboard data",
+)
 async def get_plant_dashboard(
     plant_id: int,
     current_user: User = Depends(get_current_user),
@@ -502,9 +529,14 @@ async def get_plant_dashboard(
     )
     plant = result.scalar_one_or_none()
     if not plant:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Plant not found")
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Plant not found"
+        )
     if plant.owner_id != current_user.owner_id:
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Not allowed to view this plant")
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Not allowed to view this plant",
+        )
 
     # Rooms for this plant
     rooms_result = await db.execute(
@@ -541,15 +573,21 @@ async def get_plant_dashboard(
             harvest_stats[row[0]] = {
                 "yield_kg": float(row[1]),
                 "count": row[2],
-                "a": row[3], "b": row[4], "c": row[5],
+                "a": row[3],
+                "b": row[4],
+                "c": row[5],
             }
 
     # Active growth cycles for rooms (with day count)
     growth_info: dict[int, dict] = {}
     if room_ids:
         gc_q = await db.execute(
-            select(GrowthCycle.room_id, GrowthCycle.current_stage, GrowthCycle.stage_changed_at, GrowthCycle.started_at)
-            .where(GrowthCycle.room_id.in_(room_ids), GrowthCycle.is_active == True)
+            select(
+                GrowthCycle.room_id,
+                GrowthCycle.current_stage,
+                GrowthCycle.stage_changed_at,
+                GrowthCycle.started_at,
+            ).where(GrowthCycle.room_id.in_(room_ids), GrowthCycle.is_active == True)
         )
         for row in gc_q.all():
             stage_start = row[2] or row[3]  # stage_changed_at or started_at
@@ -662,7 +700,11 @@ async def get_plant_dashboard(
     online_q = await db.execute(
         select(func.count(Device.device_id))
         .join(Room, Room.room_id == Device.room_id)
-        .where(Room.plant_id == plant_id, Device.is_active == True, Device.is_online == True)
+        .where(
+            Room.plant_id == plant_id,
+            Device.is_active == True,
+            Device.is_online == True,
+        )
     )
     online_devices = online_q.scalar() or 0
 

@@ -18,10 +18,16 @@ class ContactInquiry(Base):
     __tablename__ = "contact_inquiries"
 
     inquiry_id = Column(Integer, primary_key=True, autoincrement=True)
-    inquiry_type = Column(SAEnum(InquiryType), default=InquiryType.GENERAL, nullable=False)
+    inquiry_type = Column(
+        SAEnum(InquiryType), default=InquiryType.GENERAL, nullable=False
+    )
     name = Column(String(255), nullable=False)
     email = Column(String(255), nullable=False)
     phone = Column(String(50), nullable=True)
     farm_size = Column(String(50), nullable=True)
     message = Column(Text, nullable=False)
-    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc).replace(tzinfo=None), nullable=False)
+    created_at = Column(
+        DateTime,
+        default=lambda: datetime.now(timezone.utc).replace(tzinfo=None),
+        nullable=False,
+    )

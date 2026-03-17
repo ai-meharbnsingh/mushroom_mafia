@@ -53,9 +53,7 @@ async def create_inquiry(
 async def list_inquiries(
     limit: int = Query(50, ge=1, le=200),
     offset: int = Query(0, ge=0),
-    current_user: User = Depends(
-        require_roles(UserRole.SUPER_ADMIN, UserRole.ADMIN)
-    ),
+    current_user: User = Depends(require_roles(UserRole.SUPER_ADMIN, UserRole.ADMIN)),
     db: AsyncSession = Depends(get_db),
 ):
     """List all contact inquiries (admin only), newest first."""

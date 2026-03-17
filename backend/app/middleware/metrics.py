@@ -13,7 +13,9 @@ logger = logging.getLogger(__name__)
 _METRIC_TTL = 86400
 
 
-async def record_metric(name: str, value: int = 1, metric_type: str = "counter") -> None:
+async def record_metric(
+    name: str, value: int = 1, metric_type: str = "counter"
+) -> None:
     """Increment a Redis counter for the given metric name.
 
     Gracefully handles Redis being unavailable — metrics should never crash the app.

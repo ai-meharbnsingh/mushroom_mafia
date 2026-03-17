@@ -11,7 +11,11 @@ from app.models.room import Room
 from app.models.plant import Plant
 from app.models.user import User
 from app.models.enums import UserRole, GrowthStage
-from app.schemas.harvest import GrowthCycleCreate, GrowthCycleUpdate, GrowthCycleResponse
+from app.schemas.harvest import (
+    GrowthCycleCreate,
+    GrowthCycleUpdate,
+    GrowthCycleResponse,
+)
 from app.api.deps import get_current_user, require_roles
 from app.services.climate_advisory import on_stage_advanced
 from app.services.mqtt_client import mqtt_manager
@@ -33,9 +37,7 @@ STAGE_ORDER = [
 ]
 
 
-async def _verify_room_ownership(
-    db: AsyncSession, room_id: int, owner_id: int
-) -> Room:
+async def _verify_room_ownership(db: AsyncSession, room_id: int, owner_id: int) -> Room:
     """Verify a room belongs to the given owner."""
     result = await db.execute(
         select(Room)
@@ -98,7 +100,9 @@ async def create_growth_cycle(
         expected_harvest_date=body.expected_harvest_date,
         target_yield_kg=body.target_yield_kg,
         notes=body.notes,
-        auto_adjust_thresholds=body.auto_adjust_thresholds if body.auto_adjust_thresholds is not None else True,
+        auto_adjust_thresholds=body.auto_adjust_thresholds
+        if body.auto_adjust_thresholds is not None
+        else True,
         created_by=current_user.user_id,
         is_active=True,
     )

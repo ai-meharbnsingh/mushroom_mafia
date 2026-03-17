@@ -13,7 +13,11 @@ from app.api.deps import get_current_user, require_roles
 router = APIRouter()
 
 
-@router.get("/", response_model=list[RoomResponse], summary="List all rooms for the current user")
+@router.get(
+    "/",
+    response_model=list[RoomResponse],
+    summary="List all rooms for the current user",
+)
 async def list_rooms(
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
@@ -27,9 +31,7 @@ async def list_rooms(
         conditions.append(Plant.plant_id.in_(assigned_ids))
 
     result = await db.execute(
-        select(Room)
-        .join(Plant, Room.plant_id == Plant.plant_id)
-        .where(*conditions)
+        select(Room).join(Plant, Room.plant_id == Plant.plant_id).where(*conditions)
     )
     return result.scalars().all()
 
@@ -58,7 +60,12 @@ async def get_room(
     return room
 
 
-@router.post("/", response_model=RoomResponse, status_code=status.HTTP_201_CREATED, summary="Create a new room in a plant")
+@router.post(
+    "/",
+    response_model=RoomResponse,
+    status_code=status.HTTP_201_CREATED,
+    summary="Create a new room in a plant",
+)
 async def create_room(
     room_in: RoomCreate,
     current_user: User = Depends(
@@ -68,9 +75,7 @@ async def create_room(
 ):
     """Create a room. ADMIN/MANAGER. Verify plant belongs to owner."""
     plant_result = await db.execute(
-        select(Plant).where(
-            Plant.plant_id == room_in.plant_id, Plant.is_active == True
-        )
+        select(Plant).where(Plant.plant_id == room_in.plant_id, Plant.is_active == True)
     )
     plant = plant_result.scalar_one_or_none()
     if not plant:
@@ -88,9 +93,9 @@ async def create_room(
     # Auto-generate room_code if not provided: {PLANT_CODE}-R01, R02, ...
     if not room_data.get("room_code"):
         count_result = await db.execute(
-            select(func.count()).select_from(Room).where(
-                Room.plant_id == room_in.plant_id
-            )
+            select(func.count())
+            .select_from(Room)
+            .where(Room.plant_id == room_in.plant_id)
         )
         next_num = (count_result.scalar() or 0) + 1
         room_data["room_code"] = f"{plant.plant_code}-R{next_num:02d}"
@@ -134,13 +139,13 @@ async def update_room(
     return room
 
 
-@router.patch("/{room_id}/status", response_model=RoomResponse, summary="Change room status")
+@router.patch(
+    "/{room_id}/status", response_model=RoomResponse, summary="Change room status"
+)
 async def change_room_status(
     room_id: int,
     status_in: RoomStatusChange,
-    current_user: User = Depends(
-        require_roles(UserRole.SUPER_ADMIN)
-    ),
+    current_user: User = Depends(require_roles(UserRole.SUPER_ADMIN)),
     db: AsyncSession = Depends(get_db),
 ):
     """Change room status. SUPER_ADMIN only."""
@@ -164,12 +169,12 @@ async def change_room_status(
     return room
 
 
-@router.delete("/{room_id}", status_code=status.HTTP_200_OK, summary="Soft-delete a room")
+@router.delete(
+    "/{room_id}", status_code=status.HTTP_200_OK, summary="Soft-delete a room"
+)
 async def delete_room(
     room_id: int,
-    current_user: User = Depends(
-        require_roles(UserRole.ADMIN, UserRole.SUPER_ADMIN)
-    ),
+    current_user: User = Depends(require_roles(UserRole.ADMIN, UserRole.SUPER_ADMIN)),
     db: AsyncSession = Depends(get_db),
 ):
     """Soft delete a room. ADMIN+ only."""

@@ -65,9 +65,7 @@ async def health_check():
 
     Returns healthy/degraded/unhealthy based on DB, Redis, and MQTT status.
     """
-    db_status, redis_status = await asyncio.gather(
-        _check_db(), _check_redis()
-    )
+    db_status, redis_status = await asyncio.gather(_check_db(), _check_redis())
     mqtt_status = _check_mqtt()
 
     db_ok = db_status["status"] == "healthy"
@@ -95,9 +93,7 @@ async def health_detailed(
     """Detailed health check with latencies and device counts (requires auth)."""
     from app.models.device import Device
 
-    db_status, redis_status = await asyncio.gather(
-        _check_db(), _check_redis()
-    )
+    db_status, redis_status = await asyncio.gather(_check_db(), _check_redis())
     mqtt_status = _check_mqtt()
 
     # Device counts
@@ -107,7 +103,9 @@ async def health_detailed(
             result = await session.execute(
                 select(
                     func.count(Device.device_id).label("total"),
-                    func.count(Device.device_id).filter(Device.is_online == True).label("online"),
+                    func.count(Device.device_id)
+                    .filter(Device.is_online == True)
+                    .label("online"),
                 ).where(Device.is_active == True)
             )
             row = result.one()
@@ -121,7 +119,9 @@ async def health_detailed(
     startup_time = getattr(request.app.state, "startup_time", None)
     uptime_seconds = None
     if startup_time:
-        uptime_seconds = round((datetime.now(timezone.utc) - startup_time).total_seconds(), 1)
+        uptime_seconds = round(
+            (datetime.now(timezone.utc) - startup_time).total_seconds(), 1
+        )
 
     return {
         "status": "healthy" if db_status["status"] == "healthy" else "degraded",
@@ -189,6 +189,7 @@ async def health_metrics(
         try:
             async with async_session_factory() as session:
                 from app.models.alert import Alert
+
                 result = await session.execute(
                     select(func.count(Alert.alert_id)).where(Alert.is_resolved == False)
                 )

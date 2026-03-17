@@ -24,13 +24,23 @@ logger = logging.getLogger(__name__)
 router = APIRouter()
 
 
-@router.post("/login", response_model=TokenResponse, dependencies=[Depends(safe_rate_limit(times=5, seconds=60))])
-async def login(login_request: LoginRequest, http_request: Request, response: Response, db: AsyncSession = Depends(get_db)):
+@router.post(
+    "/login",
+    response_model=TokenResponse,
+    dependencies=[Depends(safe_rate_limit(times=5, seconds=60))],
+)
+async def login(
+    login_request: LoginRequest,
+    http_request: Request,
+    response: Response,
+    db: AsyncSession = Depends(get_db),
+):
     """Authenticate user and return access + refresh tokens."""
     user = await authenticate_user(db, login_request.username, login_request.password)
     if not user:
         await write_audit_log(
-            db, AuditAction.LOGIN,
+            db,
+            AuditAction.LOGIN,
             table_name="users",
             new_value={"username": login_request.username, "success": False},
             request=http_request,
@@ -42,8 +52,10 @@ async def login(login_request: LoginRequest, http_request: Request, response: Re
         )
 
     await write_audit_log(
-        db, AuditAction.LOGIN,
-        user_id=user.user_id, table_name="users",
+        db,
+        AuditAction.LOGIN,
+        user_id=user.user_id,
+        table_name="users",
         record_id=user.user_id,
         new_value={"username": user.username, "success": True},
         request=http_request,
@@ -52,9 +64,30 @@ async def login(login_request: LoginRequest, http_request: Request, response: Re
 
     tokens = create_tokens(user)
     csrf_token = secrets.token_urlsafe(32)
-    response.set_cookie(key="access_token", value=tokens["access_token"], httponly=True, samesite=settings.cookie_samesite, secure=settings.cookie_secure, max_age=settings.ACCESS_TOKEN_EXPIRE_MINUTES * 60)
-    response.set_cookie(key="refresh_token", value=tokens["refresh_token"], httponly=True, samesite=settings.cookie_samesite, secure=settings.cookie_secure, max_age=settings.REFRESH_TOKEN_EXPIRE_DAYS * 24 * 60 * 60)
-    response.set_cookie(key="csrf_token", value=csrf_token, httponly=False, samesite=settings.cookie_samesite, secure=settings.cookie_secure, max_age=settings.ACCESS_TOKEN_EXPIRE_MINUTES * 60)
+    response.set_cookie(
+        key="access_token",
+        value=tokens["access_token"],
+        httponly=True,
+        samesite=settings.cookie_samesite,
+        secure=settings.cookie_secure,
+        max_age=settings.ACCESS_TOKEN_EXPIRE_MINUTES * 60,
+    )
+    response.set_cookie(
+        key="refresh_token",
+        value=tokens["refresh_token"],
+        httponly=True,
+        samesite=settings.cookie_samesite,
+        secure=settings.cookie_secure,
+        max_age=settings.REFRESH_TOKEN_EXPIRE_DAYS * 24 * 60 * 60,
+    )
+    response.set_cookie(
+        key="csrf_token",
+        value=csrf_token,
+        httponly=False,
+        samesite=settings.cookie_samesite,
+        secure=settings.cookie_secure,
+        max_age=settings.ACCESS_TOKEN_EXPIRE_MINUTES * 60,
+    )
     return TokenResponse(
         access_token=tokens["access_token"],
         refresh_token=tokens["refresh_token"],
@@ -72,13 +105,20 @@ async def logout(response: Response, current_user: User = Depends(get_current_us
 
 
 @router.post("/refresh", response_model=TokenResponse)
-async def refresh_token(request: Request, response: Response, body: RefreshRequest = None, db: AsyncSession = Depends(get_db)):
+async def refresh_token(
+    request: Request,
+    response: Response,
+    body: RefreshRequest = None,
+    db: AsyncSession = Depends(get_db),
+):
     """Validate refresh token and issue a new access token."""
     refresh_token = request.cookies.get("refresh_token")
     if not refresh_token and body:
         refresh_token = body.refresh_token
     if not refresh_token:
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Missing refresh token")
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED, detail="Missing refresh token"
+        )
     try:
         payload = decode_token(refresh_token)
     except Exception:
@@ -112,9 +152,30 @@ async def refresh_token(request: Request, response: Response, body: RefreshReque
 
     tokens = create_tokens(user)
     csrf_token = secrets.token_urlsafe(32)
-    response.set_cookie(key="access_token", value=tokens["access_token"], httponly=True, samesite=settings.cookie_samesite, secure=settings.cookie_secure, max_age=settings.ACCESS_TOKEN_EXPIRE_MINUTES * 60)
-    response.set_cookie(key="refresh_token", value=tokens["refresh_token"], httponly=True, samesite=settings.cookie_samesite, secure=settings.cookie_secure, max_age=settings.REFRESH_TOKEN_EXPIRE_DAYS * 24 * 60 * 60)
-    response.set_cookie(key="csrf_token", value=csrf_token, httponly=False, samesite=settings.cookie_samesite, secure=settings.cookie_secure, max_age=settings.ACCESS_TOKEN_EXPIRE_MINUTES * 60)
+    response.set_cookie(
+        key="access_token",
+        value=tokens["access_token"],
+        httponly=True,
+        samesite=settings.cookie_samesite,
+        secure=settings.cookie_secure,
+        max_age=settings.ACCESS_TOKEN_EXPIRE_MINUTES * 60,
+    )
+    response.set_cookie(
+        key="refresh_token",
+        value=tokens["refresh_token"],
+        httponly=True,
+        samesite=settings.cookie_samesite,
+        secure=settings.cookie_secure,
+        max_age=settings.REFRESH_TOKEN_EXPIRE_DAYS * 24 * 60 * 60,
+    )
+    response.set_cookie(
+        key="csrf_token",
+        value=csrf_token,
+        httponly=False,
+        samesite=settings.cookie_samesite,
+        secure=settings.cookie_secure,
+        max_age=settings.ACCESS_TOKEN_EXPIRE_MINUTES * 60,
+    )
     return TokenResponse(
         access_token=tokens["access_token"],
         refresh_token=tokens["refresh_token"],
@@ -144,8 +205,10 @@ async def change_password(
 
     current_user.password_hash = hash_password(change_req.new_password)
     await write_audit_log(
-        db, AuditAction.CONFIG_CHANGE,
-        user_id=current_user.user_id, table_name="users",
+        db,
+        AuditAction.CONFIG_CHANGE,
+        user_id=current_user.user_id,
+        table_name="users",
         record_id=current_user.user_id,
         new_value={"action": "password_changed"},
         request=http_request,

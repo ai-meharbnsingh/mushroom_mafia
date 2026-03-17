@@ -30,7 +30,9 @@ async def authenticate_user(
     # Check lockout — auto-unlock if the lockout period has expired
     if user.locked_until:
         if user.locked_until > utcnow_naive():
-            remaining = int((user.locked_until - utcnow_naive()).total_seconds() / 60) + 1
+            remaining = (
+                int((user.locked_until - utcnow_naive()).total_seconds() / 60) + 1
+            )
             raise HTTPException(
                 status_code=status.HTTP_429_TOO_MANY_REQUESTS,
                 detail=f"Account temporarily locked due to too many failed attempts. Try again in {remaining} minute(s).",

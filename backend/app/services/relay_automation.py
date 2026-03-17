@@ -13,7 +13,9 @@ from app.models.device import Device
 from app.models.room import Room
 from app.models.plant import Plant
 from app.models.enums import (
-    RelayType, TriggerType, ThresholdParameter,
+    RelayType,
+    TriggerType,
+    ThresholdParameter,
 )
 
 logger = logging.getLogger(__name__)
@@ -102,7 +104,9 @@ def _should_change_relay(
     return None  # No change
 
 
-async def _get_current_relay_state(redis: Redis, device_id: int, relay_type: str) -> bool | None:
+async def _get_current_relay_state(
+    redis: Redis, device_id: int, relay_type: str
+) -> bool | None:
     """Get the current relay state from Redis."""
     raw = await redis.get(f"live:relay:{device_id}")
     if not raw:

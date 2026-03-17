@@ -24,7 +24,7 @@ class RelayConfigResponse(BaseModel):
 class RelayScheduleCreate(BaseModel):
     relay_type: str
     days_of_week: int = 127
-    time_on: str   # "HH:MM"
+    time_on: str  # "HH:MM"
     time_off: str  # "HH:MM"
 
 

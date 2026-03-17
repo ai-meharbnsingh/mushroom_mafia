@@ -1,5 +1,13 @@
 from sqlalchemy import (
-    Column, Integer, Boolean, Numeric, DateTime, Enum, ForeignKey, Index, UniqueConstraint,
+    Column,
+    Integer,
+    Boolean,
+    Numeric,
+    DateTime,
+    Enum,
+    ForeignKey,
+    Index,
+    UniqueConstraint,
 )
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func

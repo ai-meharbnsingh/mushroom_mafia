@@ -90,7 +90,9 @@ async def get_all_live_readings(
     return {"readings": readings}
 
 
-@router.get("/readings/device/{device_id}", summary="Get live reading for a specific device")
+@router.get(
+    "/readings/device/{device_id}", summary="Get live reading for a specific device"
+)
 async def get_device_live_reading(
     device_id: int,
     current_user: User = Depends(get_current_user),
@@ -181,7 +183,11 @@ async def set_relay_command(
     now = utcnow_naive()
 
     # If device uses MQTT, publish relay command via MQTT instead of Redis polling
-    if device.communication_mode.value == "MQTT" if device.communication_mode else False:
+    if (
+        device.communication_mode.value == "MQTT"
+        if device.communication_mode
+        else False
+    ):
         try:
             from app.services.mqtt_client import mqtt_manager
 
@@ -192,9 +198,7 @@ async def set_relay_command(
             pass  # Fall through to Redis as backup
 
     # Write command to Redis with 30s TTL
-    cmd_data = json.dumps(
-        {"relay_type": command.relay_type, "state": command.state}
-    )
+    cmd_data = json.dumps({"relay_type": command.relay_type, "state": command.state})
     await redis.setex(f"command:relay:{device_id}", 30, cmd_data)
 
     # Log to PostgreSQL relay_status table
@@ -236,7 +240,9 @@ async def set_relay_command(
 # ─── Relay Config Endpoints ───────────────────────────────────────────────────
 
 
-@router.get("/relay-config/{device_id}", summary="Get relay automation configs for a device")
+@router.get(
+    "/relay-config/{device_id}", summary="Get relay automation configs for a device"
+)
 async def get_relay_configs(
     device_id: int,
     current_user: User = Depends(get_current_user),
@@ -261,7 +267,9 @@ async def get_relay_configs(
                 RelayConfigResponse(
                     relay_type=cfg.relay_type.value,
                     mode=cfg.mode.value,
-                    threshold_param=cfg.threshold_param.value if cfg.threshold_param else None,
+                    threshold_param=cfg.threshold_param.value
+                    if cfg.threshold_param
+                    else None,
                     action_on_high=cfg.action_on_high,
                     action_on_low=cfg.action_on_low,
                 )
@@ -282,7 +290,9 @@ async def get_relay_configs(
     return {"configs": [c.model_dump() for c in configs]}
 
 
-@router.put("/relay-config/{device_id}", summary="Update relay automation configs for a device")
+@router.put(
+    "/relay-config/{device_id}", summary="Update relay automation configs for a device"
+)
 async def update_relay_configs(
     device_id: int,
     configs: List[RelayConfigUpdate],
@@ -360,7 +370,9 @@ async def update_relay_configs(
     return {"status": "success", "updated": updated}
 
 
-@router.post("/relay-config/{device_id}/all-auto", summary="Set all relays to AUTO mode")
+@router.post(
+    "/relay-config/{device_id}/all-auto", summary="Set all relays to AUTO mode"
+)
 async def set_all_relays_auto(
     device_id: int,
     current_user: User = Depends(get_current_user),
@@ -409,7 +421,9 @@ async def set_all_relays_auto(
     return {"status": "success", "mode": "AUTO"}
 
 
-@router.post("/relay-config/{device_id}/all-manual", summary="Set all relays to MANUAL mode")
+@router.post(
+    "/relay-config/{device_id}/all-manual", summary="Set all relays to MANUAL mode"
+)
 async def set_all_relays_manual(
     device_id: int,
     current_user: User = Depends(get_current_user),
@@ -455,7 +469,9 @@ async def set_all_relays_manual(
 # ─── Relay Schedule Endpoints ─────────────────────────────────────────────────
 
 
-@router.get("/relay-schedule/{device_id}", summary="List all relay schedules for a device")
+@router.get(
+    "/relay-schedule/{device_id}", summary="List all relay schedules for a device"
+)
 async def get_relay_schedules(
     device_id: int,
     current_user: User = Depends(get_current_user),
@@ -484,7 +500,9 @@ async def get_relay_schedules(
     }
 
 
-@router.post("/relay-schedule/{device_id}", summary="Create a relay schedule for a device")
+@router.post(
+    "/relay-schedule/{device_id}", summary="Create a relay schedule for a device"
+)
 async def create_relay_schedule(
     device_id: int,
     schedule_in: RelayScheduleCreate,

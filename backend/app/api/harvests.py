@@ -18,9 +18,7 @@ from app.api.deps import get_current_user, require_roles
 router = APIRouter()
 
 
-async def _verify_room_ownership(
-    db: AsyncSession, room_id: int, owner_id: int
-) -> Room:
+async def _verify_room_ownership(db: AsyncSession, room_id: int, owner_id: int) -> Room:
     """Verify a room belongs to the given owner. Return the room or raise 404/403."""
     result = await db.execute(
         select(Room)
@@ -34,8 +32,7 @@ async def _verify_room_ownership(
         )
 
     ownership = await db.execute(
-        select(Plant.owner_id)
-        .where(Plant.plant_id == room.plant_id)
+        select(Plant.owner_id).where(Plant.plant_id == room.plant_id)
     )
     room_owner_id = ownership.scalar_one_or_none()
     if room_owner_id != owner_id:
@@ -50,7 +47,9 @@ async def _verify_room_ownership(
 async def create_harvest(
     body: HarvestCreate,
     current_user: User = Depends(
-        require_roles(UserRole.ADMIN, UserRole.SUPER_ADMIN, UserRole.MANAGER, UserRole.OPERATOR)
+        require_roles(
+            UserRole.ADMIN, UserRole.SUPER_ADMIN, UserRole.MANAGER, UserRole.OPERATOR
+        )
     ),
     db: AsyncSession = Depends(get_db),
 ):

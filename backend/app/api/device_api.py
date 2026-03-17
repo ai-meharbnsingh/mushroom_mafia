@@ -25,12 +25,16 @@ from app.api.deps import safe_rate_limit
 from app.utils.time import utcnow_naive
 
 # License key format: LIC-XXXX-YYYY-ZZZZ (uppercase alphanumeric groups)
-LICENSE_KEY_PATTERN = re.compile(r'^LIC-[A-Z0-9]{4}-[A-Z0-9]{4}-[A-Z0-9]{4}$')
+LICENSE_KEY_PATTERN = re.compile(r"^LIC-[A-Z0-9]{4}-[A-Z0-9]{4}-[A-Z0-9]{4}$")
 
 router = APIRouter()
 
 
-@router.post("/register", response_model=DeviceRegisterResponse, dependencies=[Depends(safe_rate_limit(times=5, seconds=60))])
+@router.post(
+    "/register",
+    response_model=DeviceRegisterResponse,
+    dependencies=[Depends(safe_rate_limit(times=5, seconds=60))],
+)
 async def register_device(
     request: DeviceRegisterRequest,
     db: AsyncSession = Depends(get_db),
@@ -88,7 +92,11 @@ async def register_device(
     )
 
 
-@router.get("/provision/{license_key}", response_model=DeviceProvisioningInfo, dependencies=[Depends(safe_rate_limit(times=10, seconds=60))])
+@router.get(
+    "/provision/{license_key}",
+    response_model=DeviceProvisioningInfo,
+    dependencies=[Depends(safe_rate_limit(times=10, seconds=60))],
+)
 async def poll_provisioning(
     license_key: str,
     x_mac_address: str | None = Header(None, alias="X-Mac-Address"),

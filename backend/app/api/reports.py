@@ -59,9 +59,7 @@ async def get_report(
         conditions.append(Plant.plant_id.in_(assigned_ids))
 
     result = await db.execute(
-        select(Report)
-        .join(Plant, Report.plant_id == Plant.plant_id)
-        .where(*conditions)
+        select(Report).join(Plant, Report.plant_id == Plant.plant_id).where(*conditions)
     )
     report = result.scalar_one_or_none()
     if not report:
@@ -145,9 +143,7 @@ async def download_report(
         conditions.append(Plant.plant_id.in_(assigned_ids))
 
     result = await db.execute(
-        select(Report)
-        .join(Plant, Report.plant_id == Plant.plant_id)
-        .where(*conditions)
+        select(Report).join(Plant, Report.plant_id == Plant.plant_id).where(*conditions)
     )
     report = result.scalar_one_or_none()
     if not report:
@@ -179,9 +175,7 @@ async def download_report(
 @router.delete("/{report_id}", status_code=status.HTTP_200_OK)
 async def delete_report(
     report_id: int,
-    current_user: User = Depends(
-        require_roles(UserRole.ADMIN, UserRole.SUPER_ADMIN)
-    ),
+    current_user: User = Depends(require_roles(UserRole.ADMIN, UserRole.SUPER_ADMIN)),
     db: AsyncSession = Depends(get_db),
 ):
     """Delete a report. ADMIN+ only. Also removes the file from disk."""

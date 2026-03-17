@@ -1,5 +1,13 @@
 from sqlalchemy import (
-    Column, Integer, String, Boolean, DateTime, Text, Enum, ForeignKey, Index,
+    Column,
+    Integer,
+    String,
+    Boolean,
+    DateTime,
+    Text,
+    Enum,
+    ForeignKey,
+    Index,
 )
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
@@ -31,9 +39,7 @@ class Device(Base):
         Enum(SubscriptionStatus), default=SubscriptionStatus.PENDING
     )
     subscription_expires_at = Column(DateTime, nullable=True)
-    communication_mode = Column(
-        Enum(CommunicationMode), default=CommunicationMode.HTTP
-    )
+    communication_mode = Column(Enum(CommunicationMode), default=CommunicationMode.HTTP)
     linked_by_user_id = Column(Integer, ForeignKey("users.user_id"), nullable=True)
     linked_at = Column(DateTime, nullable=True)
     qr_code_image = Column(Text, nullable=True)

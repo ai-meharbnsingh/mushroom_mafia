@@ -6,7 +6,13 @@ from pydantic import BaseModel, ConfigDict, Field
 
 class DeviceProvision(BaseModel):
     """Super Admin provisions a new device (factory step)."""
-    mac_address: str = Field(..., min_length=17, max_length=17, pattern=r"^([0-9A-Fa-f]{2}:){5}[0-9A-Fa-f]{2}$")
+
+    mac_address: str = Field(
+        ...,
+        min_length=17,
+        max_length=17,
+        pattern=r"^([0-9A-Fa-f]{2}:){5}[0-9A-Fa-f]{2}$",
+    )
     device_name: str = Field(..., min_length=1, max_length=50)
     device_type: str = "ESP32"
 
@@ -26,6 +32,7 @@ class DeviceUpdate(BaseModel):
 
 class DeviceAssignRequest(BaseModel):
     """Super Admin assigns device to a plant."""
+
     plant_id: int
 
 
@@ -79,6 +86,7 @@ class DeviceRegisterResponse(BaseModel):
 
 class DeviceProvisioningInfo(BaseModel):
     """Returned when ESP32 polls for MQTT credentials."""
+
     status: str  # "pending", "pending_approval", or "ready"
     message: Optional[str] = None
     mqtt_password: Optional[str] = None
@@ -93,6 +101,7 @@ class DeviceProvisioningInfo(BaseModel):
 
 class DeviceLinkRequest(BaseModel):
     """Link a device to a room via QR scan."""
+
     license_key: str
     room_id: int
 

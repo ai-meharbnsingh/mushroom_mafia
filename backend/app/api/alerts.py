@@ -65,9 +65,7 @@ async def list_active_alerts(
     db: AsyncSession = Depends(get_db),
 ):
     """List unresolved alerts."""
-    query = _owner_filtered_alerts_query(current_user).where(
-        Alert.is_resolved == False
-    )
+    query = _owner_filtered_alerts_query(current_user).where(Alert.is_resolved == False)
     query = query.order_by(Alert.created_at.desc())
     result = await db.execute(query)
     return result.scalars().all()
@@ -80,9 +78,7 @@ async def get_alert(
     db: AsyncSession = Depends(get_db),
 ):
     """Get alert by ID."""
-    query = _owner_filtered_alerts_query(current_user).where(
-        Alert.alert_id == alert_id
-    )
+    query = _owner_filtered_alerts_query(current_user).where(Alert.alert_id == alert_id)
     result = await db.execute(query)
     alert = result.scalar_one_or_none()
     if not alert:
@@ -106,9 +102,7 @@ async def acknowledge_alert(
     db: AsyncSession = Depends(get_db),
 ):
     """Acknowledge an alert. Set is_read=True, acknowledged_by, acknowledged_at. OPERATOR+ role."""
-    query = _owner_filtered_alerts_query(current_user).where(
-        Alert.alert_id == alert_id
-    )
+    query = _owner_filtered_alerts_query(current_user).where(Alert.alert_id == alert_id)
     result = await db.execute(query)
     alert = result.scalar_one_or_none()
     if not alert:
@@ -127,16 +121,12 @@ async def acknowledge_alert(
 async def resolve_alert(
     alert_id: int,
     current_user: User = Depends(
-        require_roles(
-            UserRole.MANAGER, UserRole.ADMIN, UserRole.SUPER_ADMIN
-        )
+        require_roles(UserRole.MANAGER, UserRole.ADMIN, UserRole.SUPER_ADMIN)
     ),
     db: AsyncSession = Depends(get_db),
 ):
     """Resolve an alert. Set is_resolved=True, resolved_at=now. MANAGER+ role."""
-    query = _owner_filtered_alerts_query(current_user).where(
-        Alert.alert_id == alert_id
-    )
+    query = _owner_filtered_alerts_query(current_user).where(Alert.alert_id == alert_id)
     result = await db.execute(query)
     alert = result.scalar_one_or_none()
     if not alert:

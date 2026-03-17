@@ -5,7 +5,16 @@ import os
 import re
 from pathlib import Path
 
-from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form, status, Header
+from fastapi import (
+    APIRouter,
+    Depends,
+    HTTPException,
+    UploadFile,
+    File,
+    Form,
+    status,
+    Header,
+)
 from fastapi.responses import FileResponse, StreamingResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, update, desc
@@ -60,9 +69,7 @@ async def upload_firmware(
     file: UploadFile = File(...),
     version: str = Form(...),
     release_notes: str = Form(None),
-    current_user: User = Depends(
-        require_roles(UserRole.SUPER_ADMIN, UserRole.ADMIN)
-    ),
+    current_user: User = Depends(require_roles(UserRole.SUPER_ADMIN, UserRole.ADMIN)),
     db: AsyncSession = Depends(get_db),
 ):
     """Upload a firmware .bin file (ADMIN+ only).
@@ -78,16 +85,14 @@ async def upload_firmware(
         )
 
     # Validate version format (alphanumeric, dots, hyphens, plus signs)
-    if not re.match(r'^[\w][\w.+-]*$', version):
+    if not re.match(r"^[\w][\w.+-]*$", version):
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Invalid version format. Use alphanumeric characters, dots, hyphens, and plus signs.",
         )
 
     # Check version uniqueness
-    existing = await db.execute(
-        select(Firmware).where(Firmware.version == version)
-    )
+    existing = await db.execute(select(Firmware).where(Firmware.version == version))
     if existing.scalar_one_or_none():
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
@@ -125,7 +130,10 @@ async def upload_firmware(
 
     logger.info(
         "Firmware v%s uploaded by user %s (size=%d, sha256=%s)",
-        version, current_user.user_id, file_size, checksum,
+        version,
+        current_user.user_id,
+        file_size,
+        checksum,
     )
 
     return firmware
@@ -137,9 +145,7 @@ async def list_firmware(
     db: AsyncSession = Depends(get_db),
 ):
     """List all firmware versions ordered by created_at descending."""
-    result = await db.execute(
-        select(Firmware).order_by(Firmware.created_at.desc())
-    )
+    result = await db.execute(select(Firmware).order_by(Firmware.created_at.desc()))
     return result.scalars().all()
 
 
@@ -208,9 +214,7 @@ async def download_firmware(
 @router.post("/rollout")
 async def rollout_firmware(
     rollout_in: OTARolloutRequest,
-    current_user: User = Depends(
-        require_roles(UserRole.SUPER_ADMIN, UserRole.ADMIN)
-    ),
+    current_user: User = Depends(require_roles(UserRole.SUPER_ADMIN, UserRole.ADMIN)),
     db: AsyncSession = Depends(get_db),
 ):
     """Trigger OTA rollout to selected devices (ADMIN+ only).
@@ -281,17 +285,21 @@ async def rollout_firmware(
                 # Publish OTA command via MQTT
                 if mqtt_manager._client:
                     topic = f"device/{device.license_key}/ota"
-                    payload = json.dumps({
-                        "action": "update",
-                        "version": firmware.version,
-                        "url": download_url,
-                        "checksum": firmware.checksum_sha256,
-                        "size": firmware.file_size,
-                    })
+                    payload = json.dumps(
+                        {
+                            "action": "update",
+                            "version": firmware.version,
+                            "url": download_url,
+                            "checksum": firmware.checksum_sha256,
+                            "size": firmware.file_size,
+                        }
+                    )
                     await mqtt_manager._client.publish(topic, payload)
                     logger.info(
                         "OTA command sent to device %s (license=%s) for v%s",
-                        device.device_id, device.license_key, firmware.version,
+                        device.device_id,
+                        device.license_key,
+                        firmware.version,
                     )
                     success_count += 1
                 else:
@@ -304,7 +312,8 @@ async def rollout_firmware(
             except Exception as e:
                 logger.error(
                     "Failed to send OTA to device %s: %s",
-                    device.device_id, e,
+                    device.device_id,
+                    e,
                 )
                 device.ota_status = "failed"
                 failed_count += 1
@@ -333,9 +342,7 @@ async def get_ota_status(
     db: AsyncSession = Depends(get_db),
 ):
     """Returns OTA status for all active devices."""
-    result = await db.execute(
-        select(Device).where(Device.is_active == True)
-    )
+    result = await db.execute(select(Device).where(Device.is_active == True))
     devices = result.scalars().all()
 
     return [
@@ -361,9 +368,7 @@ async def upload_firmware_file(
     version: str = Form(...),
     board_type: str = Form("ESP32"),
     notes: str = Form(None),
-    current_user: User = Depends(
-        require_roles(UserRole.SUPER_ADMIN, UserRole.ADMIN)
-    ),
+    current_user: User = Depends(require_roles(UserRole.SUPER_ADMIN, UserRole.ADMIN)),
     db: AsyncSession = Depends(get_db),
 ):
     """Upload a .bin firmware file and store it in the database (ADMIN+ only).
@@ -415,7 +420,11 @@ async def upload_firmware_file(
 
     logger.info(
         "FirmwareFile v%s uploaded by user %s (size=%d, sha256=%s, board=%s)",
-        version, current_user.user_id, file_size, checksum, board_type,
+        version,
+        current_user.user_id,
+        file_size,
+        checksum,
+        board_type,
     )
 
     return {
@@ -542,9 +551,7 @@ async def download_firmware_file_by_version(
 @router.delete("/files/{version}")
 async def delete_firmware_file(
     version: str,
-    current_user: User = Depends(
-        require_roles(UserRole.SUPER_ADMIN, UserRole.ADMIN)
-    ),
+    current_user: User = Depends(require_roles(UserRole.SUPER_ADMIN, UserRole.ADMIN)),
     db: AsyncSession = Depends(get_db),
 ):
     """Delete a firmware file version (ADMIN+ only). Sets is_active=False."""
@@ -559,5 +566,7 @@ async def delete_firmware_file(
         )
     fw.is_active = False
     await db.commit()
-    logger.info("FirmwareFile v%s deactivated by user %s", version, current_user.user_id)
+    logger.info(
+        "FirmwareFile v%s deactivated by user %s", version, current_user.user_id
+    )
     return {"detail": f"Firmware file version {version} deactivated"}

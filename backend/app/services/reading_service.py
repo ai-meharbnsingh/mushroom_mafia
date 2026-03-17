@@ -4,7 +4,13 @@ from sqlalchemy import select
 from redis.asyncio import Redis
 
 from app.models import RoomReading, Device, Threshold, Alert, RelayStatus, Room, Plant
-from app.models.enums import AlertType, Severity, ThresholdParameter, RelayType, TriggerType
+from app.models.enums import (
+    AlertType,
+    Severity,
+    ThresholdParameter,
+    RelayType,
+    TriggerType,
+)
 from app.services.relay_automation import evaluate_auto_relays
 from app.utils.time import utcnow_naive
 
@@ -98,8 +104,11 @@ async def process_reading(
             )
         except Exception:
             import logging
+
             logging.getLogger(__name__).error(
-                "Error evaluating auto relays for device %d", device.device_id, exc_info=True
+                "Error evaluating auto relays for device %d",
+                device.device_id,
+                exc_info=True,
             )
 
     # 6. Push via WebSocket

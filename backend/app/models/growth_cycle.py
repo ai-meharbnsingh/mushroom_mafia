@@ -1,5 +1,13 @@
 from sqlalchemy import (
-    Column, Integer, Boolean, Text, DateTime, Numeric, Enum, ForeignKey, Index,
+    Column,
+    Integer,
+    Boolean,
+    Text,
+    DateTime,
+    Numeric,
+    Enum,
+    ForeignKey,
+    Index,
 )
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
@@ -14,7 +22,9 @@ class GrowthCycle(Base):
     cycle_id = Column(Integer, primary_key=True, autoincrement=True)
     room_id = Column(Integer, ForeignKey("rooms.room_id"), nullable=False)
     started_at = Column(DateTime, nullable=False, server_default=func.now())
-    current_stage = Column(Enum(GrowthStage), nullable=False, default=GrowthStage.INOCULATION)
+    current_stage = Column(
+        Enum(GrowthStage), nullable=False, default=GrowthStage.INOCULATION
+    )
     stage_changed_at = Column(DateTime, nullable=True)
     expected_harvest_date = Column(DateTime, nullable=True)
     target_yield_kg = Column(Numeric(10, 2), nullable=True)

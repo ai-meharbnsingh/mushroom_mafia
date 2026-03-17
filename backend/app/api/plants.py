@@ -15,7 +15,11 @@ from app.utils.security import hash_password
 router = APIRouter()
 
 
-@router.get("/", response_model=list[PlantResponse], summary="List all plants for the current user")
+@router.get(
+    "/",
+    response_model=list[PlantResponse],
+    summary="List all plants for the current user",
+)
 async def list_plants(
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
@@ -63,12 +67,15 @@ async def get_plant(
     return plant
 
 
-@router.post("/", response_model=PlantResponse, status_code=status.HTTP_201_CREATED, summary="Create a new plant with admin attachment")
+@router.post(
+    "/",
+    response_model=PlantResponse,
+    status_code=status.HTTP_201_CREATED,
+    summary="Create a new plant with admin attachment",
+)
 async def create_plant(
     plant_in: PlantCreate,
-    current_user: User = Depends(
-        require_roles(UserRole.ADMIN, UserRole.SUPER_ADMIN)
-    ),
+    current_user: User = Depends(require_roles(UserRole.ADMIN, UserRole.SUPER_ADMIN)),
     db: AsyncSession = Depends(get_db),
 ):
     """Create a new plant with mandatory admin attachment. ADMIN+ only. Code auto-generated."""
@@ -78,9 +85,9 @@ async def create_plant(
     # Auto-generate plant_code if not provided: PLT-001, PLT-002, ...
     if not plant_data.get("plant_code"):
         count_result = await db.execute(
-            select(func.count()).select_from(Plant).where(
-                Plant.owner_id == current_user.owner_id
-            )
+            select(func.count())
+            .select_from(Plant)
+            .where(Plant.owner_id == current_user.owner_id)
         )
         next_num = (count_result.scalar() or 0) + 1
         plant_data["plant_code"] = f"PLT-{next_num:03d}"
@@ -91,7 +98,9 @@ async def create_plant(
 
     if plant_in.admin_user_id:
         result = await db.execute(
-            select(User).where(User.user_id == plant_in.admin_user_id, User.is_active == True)
+            select(User).where(
+                User.user_id == plant_in.admin_user_id, User.is_active == True
+            )
         )
         admin_user = result.scalar_one_or_none()
         if not admin_user:
@@ -133,9 +142,7 @@ async def create_plant(
 async def update_plant(
     plant_id: int,
     plant_in: PlantUpdate,
-    current_user: User = Depends(
-        require_roles(UserRole.ADMIN, UserRole.SUPER_ADMIN)
-    ),
+    current_user: User = Depends(require_roles(UserRole.ADMIN, UserRole.SUPER_ADMIN)),
     db: AsyncSession = Depends(get_db),
 ):
     """Update a plant. ADMIN+ only."""
@@ -160,12 +167,12 @@ async def update_plant(
     return plant
 
 
-@router.delete("/{plant_id}", status_code=status.HTTP_200_OK, summary="Soft-delete a plant")
+@router.delete(
+    "/{plant_id}", status_code=status.HTTP_200_OK, summary="Soft-delete a plant"
+)
 async def delete_plant(
     plant_id: int,
-    current_user: User = Depends(
-        require_roles(UserRole.ADMIN, UserRole.SUPER_ADMIN)
-    ),
+    current_user: User = Depends(require_roles(UserRole.ADMIN, UserRole.SUPER_ADMIN)),
     db: AsyncSession = Depends(get_db),
 ):
     """Soft delete a plant. ADMIN+ only."""
@@ -187,7 +194,11 @@ async def delete_plant(
     return {"detail": "Plant deactivated"}
 
 
-@router.get("/{plant_id}/rooms", response_model=list[RoomResponse], summary="List rooms for a plant")
+@router.get(
+    "/{plant_id}/rooms",
+    response_model=list[RoomResponse],
+    summary="List rooms for a plant",
+)
 async def get_plant_rooms(
     plant_id: int,
     current_user: User = Depends(get_current_user),

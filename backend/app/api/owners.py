@@ -38,10 +38,7 @@ async def get_owner(
             status_code=status.HTTP_404_NOT_FOUND, detail="Owner not found"
         )
     # Non-super-admins can only view their own owner
-    if (
-        current_user.role != UserRole.SUPER_ADMIN
-        and current_user.owner_id != owner_id
-    ):
+    if current_user.role != UserRole.SUPER_ADMIN and current_user.owner_id != owner_id:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Not allowed to view this owner",
@@ -67,9 +64,7 @@ async def create_owner(
 async def update_owner(
     owner_id: int,
     owner_in: OwnerUpdate,
-    current_user: User = Depends(
-        require_roles(UserRole.ADMIN, UserRole.SUPER_ADMIN)
-    ),
+    current_user: User = Depends(require_roles(UserRole.ADMIN, UserRole.SUPER_ADMIN)),
     db: AsyncSession = Depends(get_db),
 ):
     """Update an owner. ADMIN+ only."""
@@ -82,10 +77,7 @@ async def update_owner(
             status_code=status.HTTP_404_NOT_FOUND, detail="Owner not found"
         )
     # Non-super-admins can only update their own owner
-    if (
-        current_user.role != UserRole.SUPER_ADMIN
-        and current_user.owner_id != owner_id
-    ):
+    if current_user.role != UserRole.SUPER_ADMIN and current_user.owner_id != owner_id:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Not allowed to update this owner",

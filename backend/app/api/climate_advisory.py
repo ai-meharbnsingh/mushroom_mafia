@@ -29,9 +29,7 @@ logger = logging.getLogger(__name__)
 router = APIRouter()
 
 
-async def _verify_room_ownership(
-    db: AsyncSession, room_id: int, owner_id: int
-) -> Room:
+async def _verify_room_ownership(db: AsyncSession, room_id: int, owner_id: int) -> Room:
     """Verify a room belongs to the given owner."""
     result = await db.execute(
         select(Room)
@@ -109,9 +107,7 @@ async def update_guideline(
     plant_type: PlantType,
     growth_stage: GrowthStage,
     body: ClimateGuidelineUpdate,
-    current_user: User = Depends(
-        require_roles(UserRole.ADMIN, UserRole.SUPER_ADMIN)
-    ),
+    current_user: User = Depends(require_roles(UserRole.ADMIN, UserRole.SUPER_ADMIN)),
     db: AsyncSession = Depends(get_db),
 ):
     """Update a climate guideline. ADMIN only. Partial update."""
@@ -141,9 +137,7 @@ async def update_guideline(
 async def apply_recommended_thresholds(
     room_id: int,
     current_user: User = Depends(
-        require_roles(
-            UserRole.ADMIN, UserRole.SUPER_ADMIN, UserRole.MANAGER
-        )
+        require_roles(UserRole.ADMIN, UserRole.SUPER_ADMIN, UserRole.MANAGER)
     ),
     db: AsyncSession = Depends(get_db),
 ):
@@ -156,9 +150,7 @@ async def apply_recommended_thresholds(
 
     # Get room with plant loaded
     room_result = await db.execute(
-        select(Room)
-        .options(selectinload(Room.plant))
-        .where(Room.room_id == room_id)
+        select(Room).options(selectinload(Room.plant)).where(Room.room_id == room_id)
     )
     room_obj = room_result.scalar_one_or_none()
     if not room_obj or not room_obj.plant:

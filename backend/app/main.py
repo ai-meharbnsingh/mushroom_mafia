@@ -30,9 +30,13 @@ async def lifespan(app: FastAPI):
     # Production guard: refuse to start with default secrets
     if settings.is_production:
         if settings.JWT_SECRET.startswith("change-me"):
-            raise RuntimeError("FATAL: JWT_SECRET not set — refusing to start in production with default secret")
+            raise RuntimeError(
+                "FATAL: JWT_SECRET not set — refusing to start in production with default secret"
+            )
         if settings.DEVICE_ENCRYPTION_KEY.startswith("change-me"):
-            raise RuntimeError("FATAL: DEVICE_ENCRYPTION_KEY not set — refusing to start in production with default key")
+            raise RuntimeError(
+                "FATAL: DEVICE_ENCRYPTION_KEY not set — refusing to start in production with default key"
+            )
 
     # Redis (optional — graceful fallback if unavailable)
     try:
@@ -99,7 +103,13 @@ app.add_middleware(
     allow_origins=settings.cors_origins_list,
     allow_credentials=True,
     allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
-    allow_headers=["Content-Type", "Authorization", "X-CSRF-Token", "X-Device-ID", "X-Device-Key"],
+    allow_headers=[
+        "Content-Type",
+        "Authorization",
+        "X-CSRF-Token",
+        "X-Device-ID",
+        "X-Device-Key",
+    ],
 )
 
 # 3. Metrics middleware (fire-and-forget, safe even if Redis is down)
