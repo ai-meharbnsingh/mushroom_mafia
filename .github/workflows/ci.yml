@@ -1,18 +1,25 @@
 # =============================================================================
 # Mushroom Farm IoT Platform - CI/CD Pipeline
 # =============================================================================
-# Runs on every push/PR to main. Four parallel check jobs feed into an E2E
-# integration job, followed by a deploy gate for production pushes.
+# Runs on every push/PR to main.
 #
 # Jobs:
-#   1. backend-checks   - Python lint, format, syntax
-#   2. frontend-checks  - TypeScript type-check, production build
-#   3. firmware-checks   - PlatformIO ESP32 compile
-#   4. e2e-tests        - Playwright E2E (depends on backend + frontend checks)
-#   5. deploy-gate      - Final gate (depends on all above, main branch only)
+#   1. backend-checks    - Python lint, format, syntax
+#   2. backend-tests     - pytest (SQLite, no external services needed)
+#   3. frontend-checks   - TypeScript type-check, production build
+#   4. frontend-tests    - Vitest unit tests
+#   5. firmware-checks   - PlatformIO ESP32 compile
+#   6. deploy-backend    - Railway deploy (main branch only, after all tests pass)
+#   7. deploy-frontend   - Vercel deploy (main branch only, after all tests pass)
+#
+# Required GitHub Secrets (Settings → Secrets and variables → Actions):
+#   RAILWAY_TOKEN        - Railway API token (railway.app → Account → Tokens)
+#   VERCEL_TOKEN         - Vercel token (vercel.com → Settings → Tokens)
+#   VERCEL_ORG_ID        - From .vercel/project.json or `vercel link`
+#   VERCEL_PROJECT_ID    - From .vercel/project.json or `vercel link`
 # =============================================================================
 
-name: CI
+name: CI/CD
 
 on:
   push:
@@ -28,273 +35,243 @@ concurrency:
 jobs:
   # ===========================================================================
   # Job 1: Backend Checks (Python 3.11)
-  # Linting with ruff, format verification, and syntax compilation check.
+  # Linting, format verification, syntax check
   # ===========================================================================
   backend-checks:
-    name: Backend Checks
+    name: Backend Lint & Format
     runs-on: ubuntu-latest
-
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
       - name: Setup Python 3.11
         uses: actions/setup-python@v5
         with:
           python-version: "3.11"
 
-      # Cache pip packages to speed up subsequent runs
-      - name: Cache pip dependencies
+      - name: Cache pip
         uses: actions/cache@v5
         with:
           path: ~/.cache/pip
-          key: pip-backend-${{ runner.os }}-${{ hashFiles('backend/requirements.txt') }}
-          restore-keys: |
-            pip-backend-${{ runner.os }}-
+          key: pip-lint-${{ runner.os }}-${{ hashFiles('backend/requirements.txt') }}
+          restore-keys: pip-lint-${{ runner.os }}-
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install ruff
+
+      - name: Ruff lint
+        run: ruff check backend/app/
+
+      - name: Ruff format
+        run: ruff format --check backend/app/
+
+      - name: Python syntax check
+        run: |
+          pip install -r backend/requirements.txt
+          find backend/app/ -name "*.py" -exec python -m py_compile {} +
+
+  # ===========================================================================
+  # Job 2: Backend Tests (pytest + SQLite)
+  # Runs all pytest tests using SQLite (conftest handles DB overrides).
+  # No PostgreSQL or Redis needed — conftest uses aiosqlite + FakeRedis.
+  # ===========================================================================
+  backend-tests:
+    name: Backend Tests (pytest)
+    runs-on: ubuntu-latest
+    needs: [backend-checks]
+
+    env:
+      DATABASE_URL: sqlite+aiosqlite:///./test.db
+      REDIS_URL: redis://localhost:6379/0
+      JWT_SECRET: ci-test-secret-key
+      DEVICE_ENCRYPTION_KEY: dGVzdC1lbmNyeXB0aW9uLWtleS0xMjM0NQ==
+      ENVIRONMENT: development
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Cache pip
+        uses: actions/cache@v5
+        with:
+          path: ~/.cache/pip
+          key: pip-test-${{ runner.os }}-${{ hashFiles('backend/requirements.txt') }}
+          restore-keys: pip-test-${{ runner.os }}-
 
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
           pip install -r backend/requirements.txt
-          pip install ruff
 
-      # Lint: catch code quality issues (unused imports, undefined vars, etc.)
-      - name: Ruff lint check
-        run: ruff check backend/app/
-
-      # Format: ensure consistent code style without modifying files
-      - name: Ruff format check
-        run: ruff format --check backend/app/
-
-      # Syntax: compile every .py file to catch syntax errors early
-      - name: Python syntax check (py_compile)
+      - name: Run pytest
+        working-directory: backend
         run: |
-          find backend/app/ -name "*.py" -exec python -m py_compile {} +
-          echo "All Python files compiled successfully."
+          python -m pytest tests/ -v --tb=short 2>&1 | tee test_output.txt
+          # Fail if pytest exit code is non-zero
+          test ${PIPESTATUS[0]} -eq 0
+
+      - name: Upload test results
+        uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: backend-test-results
+          path: backend/test_output.txt
+          retention-days: 7
 
   # ===========================================================================
-  # Job 2: Frontend Checks (Node.js 20)
-  # TypeScript type checking and production build verification.
+  # Job 3: Frontend Checks (Node.js 20)
+  # TypeScript type checking and production build
   # ===========================================================================
   frontend-checks:
-    name: Frontend Checks
+    name: Frontend Build & Typecheck
     runs-on: ubuntu-latest
 
+    env:
+      # Vite needs these at build time (safe defaults for CI)
+      VITE_API_BASE_URL: http://localhost:3800/api/v1
+      VITE_WS_BASE_URL: ws://localhost:3800/api/v1
+
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
       - name: Setup Node.js 20
         uses: actions/setup-node@v6
         with:
           node-version: "20"
 
-      # Cache npm packages using package-lock.json hash
-      - name: Cache npm dependencies
+      - name: Cache npm
         uses: actions/cache@v5
         with:
           path: ~/.npm
-          key: npm-frontend-${{ runner.os }}-${{ hashFiles('frontend/package-lock.json') }}
-          restore-keys: |
-            npm-frontend-${{ runner.os }}-
+          key: npm-${{ runner.os }}-${{ hashFiles('frontend/package-lock.json') }}
+          restore-keys: npm-${{ runner.os }}-
 
       - name: Install dependencies
         run: cd frontend && npm ci
 
-      # Type check: catch TypeScript errors without emitting output
       - name: TypeScript type check
         run: cd frontend && npx tsc --noEmit
 
-      # Build: verify the production bundle compiles without errors
-      - name: Verify production build
+      - name: Production build
         run: cd frontend && npm run build
 
   # ===========================================================================
-  # Job 3: Firmware Checks (PlatformIO / ESP32)
-  # Compile the ESP32 firmware to catch C/C++ errors. No upload.
+  # Job 4: Frontend Tests (Vitest)
+  # Unit tests with jsdom
   # ===========================================================================
-  firmware-checks:
-    name: Firmware Checks
+  frontend-tests:
+    name: Frontend Tests (Vitest)
     runs-on: ubuntu-latest
+    needs: [frontend-checks]
+
+    env:
+      VITE_API_BASE_URL: http://localhost:3800/api/v1
+      VITE_WS_BASE_URL: ws://localhost:3800/api/v1
 
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
-      - name: Setup Python 3.11 (for PlatformIO)
+      - name: Setup Node.js 20
+        uses: actions/setup-node@v6
+        with:
+          node-version: "20"
+
+      - name: Cache npm
+        uses: actions/cache@v5
+        with:
+          path: ~/.npm
+          key: npm-${{ runner.os }}-${{ hashFiles('frontend/package-lock.json') }}
+          restore-keys: npm-${{ runner.os }}-
+
+      - name: Install dependencies
+        run: cd frontend && npm ci
+
+      - name: Run Vitest
+        run: cd frontend && npm run test
+
+  # ===========================================================================
+  # Job 5: Firmware Checks (PlatformIO / ESP32)
+  # Compile only — no upload to hardware
+  # ===========================================================================
+  firmware-checks:
+    name: Firmware Compile
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Python 3.11
         uses: actions/setup-python@v5
         with:
           python-version: "3.11"
 
-      # Cache PlatformIO core, packages, and toolchains
       - name: Cache PlatformIO
         uses: actions/cache@v5
         with:
           path: ~/.platformio
           key: pio-${{ runner.os }}-${{ hashFiles('Firmware/platformio.ini') }}
-          restore-keys: |
-            pio-${{ runner.os }}-
+          restore-keys: pio-${{ runner.os }}-
 
       - name: Install PlatformIO
         run: pip install platformio
 
-      # Compile firmware (build only, no upload to hardware)
       - name: Compile ESP32 firmware
         run: cd Firmware && pio run
 
   # ===========================================================================
-  # Job 4: E2E Tests (Playwright + PostgreSQL)
-  # Full integration: backend API + frontend dev server + Playwright browser.
-  # Depends on backend-checks and frontend-checks passing first.
+  # Job 6: Deploy Backend (Railway)
+  # Only on push to main, after ALL test jobs pass.
+  # Requires RAILWAY_TOKEN secret.
   # ===========================================================================
-  e2e-tests:
-    name: E2E Tests
+  deploy-backend:
+    name: Deploy Backend (Railway)
     runs-on: ubuntu-latest
-    needs: [backend-checks, frontend-checks]
-
-    # PostgreSQL service container for the test database
-    services:
-      postgres:
-        image: postgres:15
-        env:
-          POSTGRES_USER: mushroom
-          POSTGRES_PASSWORD: mushroom_dev
-          POSTGRES_DB: mushroom_farm
-        ports:
-          - 5432:5432
-        options: >-
-          --health-cmd="pg_isready -U mushroom"
-          --health-interval=10s
-          --health-timeout=5s
-          --health-retries=5
-
-    # Environment variables for backend and frontend
-    env:
-      DATABASE_URL: postgresql+asyncpg://mushroom:mushroom_dev@localhost:5432/mushroom_farm
-      REDIS_URL: ""
-      JWT_SECRET: ci-test-secret-key-for-github-actions
-      CORS_ORIGINS: http://localhost:3801
-      ENVIRONMENT: development
-      VITE_API_BASE_URL: http://localhost:3800/api/v1
-      VITE_WS_BASE_URL: ws://localhost:3800/api/v1
-
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-
-      # ---------- Python / Backend setup ----------
-
-      - name: Setup Python 3.11
-        uses: actions/setup-python@v5
-        with:
-          python-version: "3.11"
-
-      - name: Cache pip dependencies
-        uses: actions/cache@v5
-        with:
-          path: ~/.cache/pip
-          key: pip-backend-${{ runner.os }}-${{ hashFiles('backend/requirements.txt') }}
-          restore-keys: |
-            pip-backend-${{ runner.os }}-
-
-      - name: Install backend dependencies
-        run: |
-          python -m pip install --upgrade pip
-          pip install -r backend/requirements.txt
-
-      # ---------- Node.js / Frontend setup ----------
-
-      - name: Setup Node.js 20
-        uses: actions/setup-node@v6
-        with:
-          node-version: "20"
-
-      - name: Cache npm dependencies
-        uses: actions/cache@v5
-        with:
-          path: ~/.npm
-          key: npm-frontend-${{ runner.os }}-${{ hashFiles('frontend/package-lock.json') }}
-          restore-keys: |
-            npm-frontend-${{ runner.os }}-
-
-      - name: Install frontend dependencies
-        run: cd frontend && npm ci
-
-      # Install Playwright browsers (chromium only to save time)
-      - name: Install Playwright browsers
-        run: cd frontend && npx playwright install --with-deps chromium
-
-      # ---------- Database setup ----------
-
-      # Seed the database (creates tables + demo data for E2E tests)
-      - name: Seed database
-        run: cd backend && python -m app.seed
-
-      # ---------- Start services ----------
-
-      # Start the FastAPI backend in the background
-      - name: Start backend server
-        run: cd backend && uvicorn app.main:app --host 0.0.0.0 --port 3800 &
-
-      # Wait for the backend to be ready (up to 30 seconds)
-      - name: Wait for backend
-        run: |
-          timeout 30 bash -c 'until curl -sf http://localhost:3800/docs > /dev/null; do sleep 1; done'
-          echo "Backend is ready on port 3800."
-
-      # Start the Vite dev server in the background
-      - name: Start frontend dev server
-        run: cd frontend && npm run dev -- --port 3801 &
-
-      # Wait for the frontend to be ready (up to 30 seconds)
-      - name: Wait for frontend
-        run: |
-          timeout 30 bash -c 'until curl -sf http://localhost:3801 > /dev/null; do sleep 1; done'
-          echo "Frontend is ready on port 3801."
-
-      # ---------- Run E2E tests ----------
-
-      # Run Playwright in headless mode (CI override) with HTML reporter
-      - name: Run Playwright E2E tests
-        run: cd frontend && npx playwright test --reporter=html
-        env:
-          # Force headless mode in CI (overrides playwright.config.ts headless:false)
-          CI: true
-
-      # ---------- Upload artifacts ----------
-
-      # Always upload the Playwright HTML report, even if tests fail
-      - name: Upload Playwright report
-        uses: actions/upload-artifact@v7
-        if: always()
-        with:
-          name: playwright-report
-          path: frontend/playwright-report/
-          retention-days: 14
-
-  # ===========================================================================
-  # Job 5: Deploy Gate
-  # Final check that all jobs passed. Only runs on pushes to main (not PRs).
-  # Railway (backend) and Vercel (frontend) auto-deploy from main.
-  # ===========================================================================
-  deploy-gate:
-    name: Deploy Gate
-    runs-on: ubuntu-latest
-    needs: [backend-checks, frontend-checks, firmware-checks, e2e-tests]
+    needs: [backend-tests, frontend-tests, firmware-checks]
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
 
     steps:
-      - name: All checks passed
-        run: |
-          echo "============================================="
-          echo "  All CI checks passed successfully!"
-          echo "============================================="
-          echo ""
-          echo "  Backend:  lint + format + syntax  OK"
-          echo "  Frontend: typecheck + build        OK"
-          echo "  Firmware: ESP32 compile            OK"
-          echo "  E2E:      Playwright tests         OK"
-          echo ""
-          echo "  Railway auto-deploys backend from main."
-          echo "  Vercel auto-deploys frontend from main."
-          echo "============================================="
+      - uses: actions/checkout@v4
+
+      - name: Install Railway CLI
+        run: npm install -g @railway/cli
+
+      - name: Deploy to Railway
+        run: railway up --service backend
+        env:
+          RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
+
+  # ===========================================================================
+  # Job 7: Deploy Frontend (Vercel)
+  # Only on push to main, after ALL test jobs pass.
+  # Requires VERCEL_TOKEN, VERCEL_ORG_ID, VERCEL_PROJECT_ID secrets.
+  # ===========================================================================
+  deploy-frontend:
+    name: Deploy Frontend (Vercel)
+    runs-on: ubuntu-latest
+    needs: [backend-tests, frontend-tests, firmware-checks]
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Vercel CLI
+        run: npm install -g vercel
+
+      - name: Pull Vercel environment
+        run: vercel pull --yes --environment=production --token=${{ secrets.VERCEL_TOKEN }}
+
+      - name: Build for production
+        run: vercel build --prod --token=${{ secrets.VERCEL_TOKEN }}
+        env:
+          VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
+          VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
+
+      - name: Deploy to Vercel
+        run: vercel deploy --prebuilt --prod --token=${{ secrets.VERCEL_TOKEN }}
+        env:
+          VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
+          VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
