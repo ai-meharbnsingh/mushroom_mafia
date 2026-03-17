@@ -14,7 +14,7 @@ import {
   PieChart, Pie, Cell, ResponsiveContainer, BarChart, Bar, XAxis, YAxis, Tooltip,
 } from 'recharts';
 
-const REFRESH_INTERVAL = 15_000;
+const REFRESH_INTERVAL = 2_000;
 
 const COLORS = {
   online: '#27FB6B',

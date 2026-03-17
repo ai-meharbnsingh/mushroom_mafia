@@ -235,7 +235,11 @@ export const RoomDetail: React.FC = () => {
   };
 
   const handleRelayToggle = (relay: RelayType, newState: RelayState) => {
-    sendRelayCommand(room.id, relay, newState);
+    if (!device) {
+      toast.error('No device linked to this room');
+      return;
+    }
+    sendRelayCommand(device.id, relay, newState);
     setRelayTriggers(prev => ({
       ...prev,
       [relay]: 'MANUAL',

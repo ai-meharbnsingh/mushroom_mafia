@@ -18,50 +18,23 @@ from app.utils.time import utcnow_naive
 async def process_reading(
     db: AsyncSession, redis: Redis, device: Device, data: dict, ws_manager
 ) -> int:
-    """Process a sensor reading: store in Redis + PostgreSQL, check thresholds, push via WebSocket."""
+    """Process a sensor reading: Redis-first for speed, then PostgreSQL for persistence.
 
+    Pipeline order (hot path first):
+      1. Redis write      — dashboard sees data instantly (~5ms)
+      2. WebSocket push   — live UI update (~5ms)
+      3. PostgreSQL write  — cold storage for history (~200ms)
+      4. Threshold checks  — alerts if violated
+      5. Relay automation  — auto-control relays
+    """
+    import logging
+
+    log = logging.getLogger(__name__)
     now = utcnow_naive()
-
-    # 1. Build room_reading record
-    reading = RoomReading(
-        device_id=device.device_id,
-        room_id=device.room_id,
-        co2_ppm=data.get("co2_ppm"),
-        room_temp=data.get("room_temp"),
-        room_humidity=data.get("room_humidity"),
-        outdoor_temp=data.get("outdoor_temp"),
-        outdoor_humidity=data.get("outdoor_humidity"),
-        recorded_at=now,
-    )
-    # Map bag_temps list to bag_temp_1..10 columns
     bag_temps = data.get("bag_temps", []) or []
-    for i, temp in enumerate(bag_temps[:10]):
-        setattr(reading, f"bag_temp_{i + 1}", temp)
-
-    db.add(reading)
-    await db.flush()
-
-    # 2. Store relay states if provided
     relay_states = data.get("relay_states", {}) or {}
-    for relay_type_str, state in relay_states.items():
-        db.add(
-            RelayStatus(
-                device_id=device.device_id,
-                relay_type=RelayType(relay_type_str.upper()),
-                state=state,
-                trigger_type=TriggerType.AUTO,
-                changed_at=now,
-            )
-        )
 
-    # 3. Update device last_seen
-    device.is_online = True
-    device.last_seen = now
-
-    await db.commit()
-    await db.refresh(reading)
-
-    # 4. Write to Redis
+    # ── 1. HOT PATH: Redis write (dashboard reads from here) ─────────────
     live_data = {
         "device_id": device.device_id,
         "room_id": device.room_id,
@@ -74,22 +47,66 @@ async def process_reading(
         "relay_states": relay_states,
         "timestamp": now.isoformat(),
     }
-    await redis.setex(
-        f"live:device:{device.device_id}", 60, json.dumps(live_data, default=str)
-    )
+    live_json = json.dumps(live_data, default=str)
+    await redis.setex(f"live:device:{device.device_id}", 120, live_json)
     if device.room_id:
-        await redis.setex(
-            f"live:room:{device.room_id}", 60, json.dumps(live_data, default=str)
-        )
+        await redis.setex(f"live:room:{device.room_id}", 120, live_json)
     await redis.setex(
-        f"live:relay:{device.device_id}", 60, json.dumps(relay_states, default=str)
+        f"live:relay:{device.device_id}", 120, json.dumps(relay_states, default=str)
     )
 
-    # 5. Check thresholds and create alerts
+    # ── 2. HOT PATH: WebSocket push (live UI update) ─────────────────────
+    owner_id = None
+    if ws_manager and device.room_id:
+        result = await db.execute(
+            select(Plant.owner_id)
+            .join(Room, Room.plant_id == Plant.plant_id)
+            .where(Room.room_id == device.room_id)
+        )
+        owner_id = result.scalar_one_or_none()
+        if owner_id:
+            await ws_manager.broadcast_to_owner(owner_id, "sensor_update", live_data)
+
+    # ── 3. COLD PATH: PostgreSQL write (historical storage) ──────────────
+    reading = RoomReading(
+        device_id=device.device_id,
+        room_id=device.room_id,
+        co2_ppm=data.get("co2_ppm"),
+        room_temp=data.get("room_temp"),
+        room_humidity=data.get("room_humidity"),
+        outdoor_temp=data.get("outdoor_temp"),
+        outdoor_humidity=data.get("outdoor_humidity"),
+        recorded_at=now,
+    )
+    for i, temp in enumerate(bag_temps[:10]):
+        setattr(reading, f"bag_temp_{i + 1}", temp)
+
+    db.add(reading)
+
+    # Store relay states in DB for audit trail
+    for relay_type_str, state in relay_states.items():
+        db.add(
+            RelayStatus(
+                device_id=device.device_id,
+                relay_type=RelayType(relay_type_str.upper()),
+                state=state,
+                trigger_type=TriggerType.AUTO,
+                changed_at=now,
+            )
+        )
+
+    # Update device heartbeat
+    device.is_online = True
+    device.last_seen = now
+
+    await db.commit()
+    await db.refresh(reading)
+
+    # ── 4. Threshold checks + alerts ─────────────────────────────────────
     if device.room_id:
         await check_thresholds(db, redis, device, data, now, ws_manager)
 
-    # 5b. Evaluate relay automation (AUTO mode relays)
+    # ── 5. Relay automation (AUTO mode relays) ───────────────────────────
     if device.room_id:
         try:
             from app.services.mqtt_client import mqtt_manager
@@ -103,24 +120,11 @@ async def process_reading(
                 ws_manager=ws_manager,
             )
         except Exception:
-            import logging
-
-            logging.getLogger(__name__).error(
+            log.error(
                 "Error evaluating auto relays for device %d",
                 device.device_id,
                 exc_info=True,
             )
-
-    # 6. Push via WebSocket
-    if ws_manager and device.room_id:
-        result = await db.execute(
-            select(Plant.owner_id)
-            .join(Room, Room.plant_id == Plant.plant_id)
-            .where(Room.room_id == device.room_id)
-        )
-        owner_id = result.scalar_one_or_none()
-        if owner_id:
-            await ws_manager.broadcast_to_owner(owner_id, "sensor_update", live_data)
 
     return reading.reading_id
 

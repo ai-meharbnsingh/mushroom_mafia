@@ -16,7 +16,7 @@ import { dashboardService } from '@/services/dashboardService';
 import { mapPlantDashboardSummary } from '@/utils/mappers';
 import type { PlantDashboardSummary, PlantType, PlantRoomSummary } from '@/types';
 
-const REFRESH_INTERVAL = 15_000;
+const REFRESH_INTERVAL = 2_000;
 
 const stageBadgeColor: Record<string, string> = {
   INOCULATION: '#B26CFF',

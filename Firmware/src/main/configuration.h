@@ -225,7 +225,7 @@ unsigned long lastMillis = 0;             // stores current time of http req
 unsigned long lastWifiReconnectAttempt = 0;  // WiFi reconnect backoff tracker
 unsigned long wifiBackoffInterval = 10000;  // WiFi reconnect backoff — starts 10s, doubles up to 5 min (Risk 1)
 int wifiConsecutiveFailures = 0;            // Track consecutive WiFi reconnect failures (Risk 1)
-unsigned long timerDelay = 30000;  // 30 seconds (was 300000 = 5 minutes)
+unsigned long timerDelay = 2000;  // 2 seconds — fast updates for live dashboard
 bool ntpSynced = false;                     // NTP sync status (Risk 3)
 
 int deviceId = -1;  // Set after registration, stored in EEPROM
