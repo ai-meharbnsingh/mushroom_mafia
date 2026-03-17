@@ -2,9 +2,9 @@
 
 import asyncio
 import logging
-from datetime import datetime, timezone, timedelta
+from datetime import timedelta
 
-from sqlalchemy import select, and_
+from sqlalchemy import select
 
 from app.database import async_session_factory
 from app.utils.time import utcnow_naive

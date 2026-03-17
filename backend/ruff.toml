@@ -1,0 +1,5 @@
+[lint]
+# E712: SQLAlchemy requires `== True` / `== False` in WHERE clauses.
+# Ruff's suggestion (`not Model.field`) doesn't work with SQLAlchemy columns.
+# E402: main.py imports after setup_logging() call — intentional ordering.
+ignore = ["E712", "E402"]

@@ -23,7 +23,7 @@ async def websocket_endpoint(websocket: WebSocket):
         if not token:
             raise ValueError("No token")
         payload = decode_token(token)
-        user_id = int(payload.get("sub"))
+        int(payload.get("sub"))  # validate sub exists
         owner_id = payload.get("owner_id")
     except Exception:
         await websocket.close(code=4001)

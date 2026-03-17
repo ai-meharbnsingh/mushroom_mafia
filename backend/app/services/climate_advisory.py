@@ -4,7 +4,6 @@ and auto-adjusts thresholds when growth stages advance.
 """
 
 import logging
-from datetime import datetime, timezone
 from decimal import Decimal
 
 from sqlalchemy import select
@@ -15,15 +14,11 @@ from sqlalchemy.orm import selectinload
 from app.models.climate_guideline import ClimateGuideline
 from app.models.growth_cycle import GrowthCycle
 from app.models.room import Room
-from app.models.plant import Plant
 from app.models.threshold import Threshold
-from app.models.alert import Alert
 from app.models.enums import (
     PlantType,
     GrowthStage,
     ThresholdParameter,
-    AlertType,
-    Severity,
 )
 from app.schemas.climate_guideline import (
     ClimateGuidelineResponse,

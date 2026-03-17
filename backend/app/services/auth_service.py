@@ -10,7 +10,6 @@ from app.utils.security import (
     verify_password,
     create_access_token,
     create_refresh_token,
-    decode_token,
 )
 from app.config import settings
 

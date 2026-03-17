@@ -152,7 +152,7 @@ async def apply_recommended_thresholds(
     Looks up the guideline for the room's current growth stage and plant type,
     then updates the room's thresholds and publishes config to devices via MQTT.
     """
-    room = await _verify_room_ownership(db, room_id, current_user.owner_id)
+    await _verify_room_ownership(db, room_id, current_user.owner_id)
 
     # Get room with plant loaded
     room_result = await db.execute(
