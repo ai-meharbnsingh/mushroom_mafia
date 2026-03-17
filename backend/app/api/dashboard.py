@@ -1,5 +1,5 @@
 import json
-from datetime import datetime, timezone
+from datetime import datetime
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -356,7 +356,8 @@ async def get_admin_dashboard(
     all_plants = plants_list.scalars().all()
 
     # Batch fetch monthly harvest stats per plant (via room -> plant join)
-    now = datetime.now(timezone.utc)
+    # Use naive UTC datetimes — DB columns are TIMESTAMP WITHOUT TIME ZONE
+    now = utcnow_naive()
     month_start = now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
 
     plant_harvest_stats: dict[int, dict] = {}
@@ -514,7 +515,8 @@ async def get_plant_dashboard(
     total_rooms = len(rooms)
 
     # Current month boundaries for harvest query
-    now = datetime.now(timezone.utc)
+    # Use naive UTC datetimes — DB columns are TIMESTAMP WITHOUT TIME ZONE
+    now = utcnow_naive()
     month_start = now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
 
     # Harvest summary for all rooms in this plant (current month)
@@ -552,7 +554,7 @@ async def get_plant_dashboard(
         )
         for row in gc_q.all():
             stage_start = row[2] or row[3]  # stage_changed_at or started_at
-            days = (now - stage_start.replace(tzinfo=timezone.utc)).days if stage_start else None
+            days = (now - stage_start).days if stage_start else None
             growth_info[row[0]] = {
                 "stage": row[1].value if row[1] else None,
                 "days": days,
