@@ -41,7 +41,7 @@ jobs:
     name: Backend Lint & Format
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
       - name: Setup Python 3.11
         uses: actions/setup-python@v5
@@ -89,7 +89,7 @@ jobs:
       ENVIRONMENT: development
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
       - name: Setup Python 3.11
         uses: actions/setup-python@v5
@@ -137,7 +137,7 @@ jobs:
       VITE_WS_BASE_URL: ws://localhost:3800/api/v1
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
       - name: Setup Node.js 20
         uses: actions/setup-node@v6
@@ -174,7 +174,7 @@ jobs:
       VITE_WS_BASE_URL: ws://localhost:3800/api/v1
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
       - name: Setup Node.js 20
         uses: actions/setup-node@v6
@@ -202,7 +202,7 @@ jobs:
     name: Firmware Compile
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
       - name: Setup Python 3.11
         uses: actions/setup-python@v5
@@ -239,7 +239,7 @@ jobs:
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
       - name: Install Vercel CLI
         run: npm install -g vercel
